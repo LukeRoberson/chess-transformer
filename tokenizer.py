@@ -47,25 +47,25 @@ class ChessTokenizer:
 
         # Create dictionaries, an add special tokens
         self.word2idx = {
-            "0": "[Open]",
-            "1": "[CheckMate]",
-            "2": "[Draw]",
-            "3": "[Resign]",
-            "4": "[StaleMate]",
+            "[Open]": 0,
+            "[CheckMate]": 1,
+            "[Draw]": 2,
+            "[Resign]": 3,
+            "[StaleMate]": 4,
         }
 
         self.idx2word = {
-            "[Open]": "0",
-            "[CheckMate]": "1",
-            "[Draw]": "2",
-            "[Resign]": "3",
-            "[StaleMate]": "4",
+            0: "[Open]",
+            1: "[CheckMate]",
+            2: "[Draw]",
+            3: "[Resign]",
+            4: "[StaleMate]",
         }
 
         # Learn new tokens
-        forward = {move: idx for idx, move in enumerate(self.moves)}
+        forward = {move: idx for idx, move in enumerate(self.moves, start=5)}
         self.word2idx.update(forward)
-        reverse = {idx: move for idx, move in enumerate(self.moves)}
+        reverse = {idx: move for idx, move in enumerate(self.moves, start=5)}
         self.idx2word.update(reverse)
 
         # Save the mappings to JSON files
@@ -74,6 +74,21 @@ class ChessTokenizer:
 
         with open("idx2word.json", "w") as f:
             json.dump(self.idx2word, f)
+
+    def load(self):
+        '''
+        Load the mappings from JSON files
+        JSON files use strings, so the keys need to be converted to integers
+        '''
+
+        with open("word2idx.json", "r") as f:
+            self.word2idx = json.load(f)
+
+        with open("idx2word.json", "r") as f:
+            self.idx2word = json.load(f)
+
+        # Convert string keys to integer
+        self.idx2word = {int(k): v for k, v in self.idx2word.items()}
 
     def tokenize(self, text: str) -> List[int]:
         '''
@@ -92,9 +107,12 @@ class ChessTokenizer:
 
         tokens = text.split()
         token_ids = [
-            self.word2idx[token] for
-            token in tokens if
-            token in self.word2idx
+            # (3) Puts the token into the list
+            self.word2idx[token]
+            # (1) Iterate over the tokens
+            for token in tokens
+            # (2) Check if the token is in the dict
+            if token in self.word2idx
         ]
 
         return token_ids
@@ -114,10 +132,15 @@ class ChessTokenizer:
         '''
 
         tokens = [
-            self.idx2word[token_id] for
-            token_id in token_ids if
-            token_id in self.idx2word
+            # (3) Adds the token to the list
+            self.idx2word[token_id]
+            # (1) Looks through the tokens list
+            for token_id in token_ids
+            # (2) Checks if the token is in the dict
+            if token_id in self.idx2word
         ]
+
+        # Convert back to a string, separated by spaces
         text = " ".join(tokens)
 
         return text
@@ -127,11 +150,11 @@ if __name__ == "__main__":
     # Example usage
     moves = ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "Qe2", "Qf6"]
     tokenizer = ChessTokenizer()
-    tokenizer.train(moves)
+    tokenizer.load()
 
     text = "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
     token_ids = tokenizer.tokenize(text)
-    print(token_ids)  # Output: [0, 1, 2, 3, 4, 5, 6, 7]
+    print(token_ids)
 
     detokenized_text = tokenizer.detokenize(token_ids)
-    print(detokenized_text)  # Output: "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
+    print(detokenized_text)

@@ -1,1 +1,1 @@
-{"0": "[Open]", "1": "[CheckMate]", "2": "[Draw]", "3": "[Resign]", "4": "[StaleMate]", "e4": 0, "e5": 1, "Nf3": 2, "Nc6": 3, "Bc4": 4, "Bc5": 5, "Qe2": 6, "Qf6": 7}
+{"[Open]": 0, "[CheckMate]": 1, "[Draw]": 2, "[Resign]": 3, "[StaleMate]": 4, "e4": 5, "e5": 6, "Nf3": 7, "Nc6": 8, "Bc4": 9, "Bc5": 10, "Qe2": 11, "Qf6": 12}
