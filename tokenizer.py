@@ -8,6 +8,8 @@ This needs to be word-based, not character-based or sub-word
 
 from typing import List
 import json
+import re
+from tqdm import tqdm
 
 
 class ChessTokenizer:
@@ -43,30 +45,34 @@ class ChessTokenizer:
                 In standard chess notation, space separated
         '''
 
-        self.moves = moves
+        self.moves = moves.split(" ")
 
-        # Create dictionaries, an add special tokens
-        self.word2idx = {
-            "[Open]": 0,
-            "[CheckMate]": 1,
-            "[Draw]": 2,
-            "[Resign]": 3,
-            "[StaleMate]": 4,
-        }
+        # Create dictionaries, and add special tokens
+        #   This is only done once
+        if hasattr(self, "word2idx") is False:
+            self.word2idx = {
+                "[Open]": 0,
+                "[CheckMate]": 1,
+                "[Draw]": 2,
+                "[Resign]": 3,
+                "[StaleMate]": 4,
+            }
 
-        self.idx2word = {
-            0: "[Open]",
-            1: "[CheckMate]",
-            2: "[Draw]",
-            3: "[Resign]",
-            4: "[StaleMate]",
-        }
+            self.idx2word = {
+                0: "[Open]",
+                1: "[CheckMate]",
+                2: "[Draw]",
+                3: "[Resign]",
+                4: "[StaleMate]",
+            }
 
-        # Learn new tokens
-        forward = {move: idx for idx, move in enumerate(self.moves, start=5)}
-        self.word2idx.update(forward)
-        reverse = {idx: move for idx, move in enumerate(self.moves, start=5)}
-        self.idx2word.update(reverse)
+        # Learn tokens
+        for token in self.moves:
+            # Add the token to the dictionary if it is not already there
+            if token not in self.word2idx:
+                idx = len(self.word2idx)
+                self.word2idx[token] = idx
+                self.idx2word[idx] = token
 
         # Save the mappings to JSON files
         with open("word2idx.json", "w") as f:
@@ -146,15 +152,65 @@ class ChessTokenizer:
         return text
 
 
+def pgn_extract(file_path: str):
+    '''
+    Parse the JSON files
+    This creates a list of moves without the metadata or move number
+
+    Args:
+        file_path: Path to the JSON file
+
+    Returns:
+        List of chess moves as strings
+            Each string is a complete game
+    '''
+
+    with open(file_path, "r") as f:
+        moves = json.load(f)
+
+    # A list of complete games
+    game_list = []
+
+    # Parse the JSON file for games
+    year = list(moves.keys())[0]
+    for month in moves[year]:
+        for game in moves[year][month]:
+            game = re.sub(r"\d{1,3}\. ", "", game['pgn'])
+            game_list.append(game.strip())
+
+    return game_list
+
+
 if __name__ == "__main__":
-    # Example usage
-    moves = ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "Qe2", "Qf6"]
+    moves = pgn_extract("./dataset/1stsecond-2024.json")
+
     tokenizer = ChessTokenizer()
-    tokenizer.load()
+    for idx, _ in enumerate(tqdm(moves)):
+        tokenizer.train(moves[idx])
 
-    text = "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
-    token_ids = tokenizer.tokenize(text)
-    print(token_ids)
+    values = list(tokenizer.word2idx.values())
+    if len(values) != len(set(values)):
+        print("There are duplicate values in the word2idx dictionary.")
+        print(f"word2idx count: {len(values)}")
+        print(f"word2idx unique count: {len(set(values))}")
+    else:
+        print("There are no duplicate values in the word2idx dictionary.")
+        print(f"word2idx count: {len(tokenizer.word2idx)}")
 
-    detokenized_text = tokenizer.detokenize(token_ids)
-    print(detokenized_text)
+    values = list(tokenizer.idx2word.values())
+    if len(values) != len(set(values)):
+        print("There are duplicate values in the idx2word dictionary.")
+        print(f"idx2word count: {len(values)}")
+        print(f"idx2word unique count: {len(set(values))}")
+    else:
+        print("There are no duplicate values in the dictionary.")
+        print(f"idx2word count: {len(tokenizer.idx2word)}")
+
+
+
+    # text = "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
+    # token_ids = tokenizer.tokenize(text)
+    # print(token_ids)
+
+    # detokenized_text = tokenizer.detokenize(token_ids)
+    # print(detokenized_text)
