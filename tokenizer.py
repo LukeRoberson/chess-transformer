@@ -10,6 +10,7 @@ from typing import List
 import json
 import re
 from tqdm import tqdm
+import os
 
 
 class ChessTokenizer:
@@ -182,12 +183,32 @@ def pgn_extract(file_path: str):
 
 
 if __name__ == "__main__":
-    moves = pgn_extract("./dataset/1stsecond-2024.json")
-
+    # Create the tokenizer
     tokenizer = ChessTokenizer()
-    for idx, _ in enumerate(tqdm(moves)):
-        tokenizer.train(moves[idx])
 
+    # Get a list of files to train with
+    dataset_dir = "./dataset"
+    file_list = os.listdir(dataset_dir)
+    file_list = [
+        os.path.join(dataset_dir, file)
+        for file in file_list
+        if os.path.isfile(os.path.join(dataset_dir, file))
+    ]
+
+    # Train the tokenizer
+    for file in tqdm(file_list, desc="Total Progress", colour="green",):
+        moves = pgn_extract(file)
+        for idx, _ in enumerate(
+            tqdm(
+                moves,
+                desc="File Progress",
+                leave=False,
+                colour="yellow",
+            )
+        ):
+            tokenizer.train(moves[idx])
+
+    # Get some stats
     values = list(tokenizer.word2idx.values())
     if len(values) != len(set(values)):
         print("There are duplicate values in the word2idx dictionary.")
@@ -205,8 +226,6 @@ if __name__ == "__main__":
     else:
         print("There are no duplicate values in the dictionary.")
         print(f"idx2word count: {len(tokenizer.idx2word)}")
-
-
 
     # text = "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
     # token_ids = tokenizer.tokenize(text)
