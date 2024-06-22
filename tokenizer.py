@@ -11,6 +11,9 @@ import json
 import re
 from tqdm import tqdm
 import os
+import cProfile
+import pstats
+import time
 
 
 class ChessTokenizer:
@@ -24,6 +27,9 @@ class ChessTokenizer:
 
     Methods:
         train: Creates a mapping between words and indices
+        learn_tokens: Learns the tokens from the input text
+        json_save: Saves the mappings to JSON files
+        load: Loads the mappings from JSON files
         tokenize: Tokenizes the input text into a list of integers
         detokenize: Converts a list of integers (tokens) into a string
     '''
@@ -31,12 +37,20 @@ class ChessTokenizer:
     def __init__(self):
         '''
         The constructor
-        Nothing to do here
+        The train_prep flag is used to check if the mappings have been started
+            This allows training to resume
         '''
-        pass
 
-    def train(self, moves: List[str]):
+        # Set the train_prep flag
+        self.train_prep = False
+
+        # A counter to track the next item in the dictionary
+        self.next_value = 1
+
+    def train(self, file_list: List[str]):
         '''
+        Main training function
+
         Creates a mapping between words and indices
         Creates a mapping between indices and words
         Save the mappings to JSON files
@@ -46,11 +60,9 @@ class ChessTokenizer:
                 In standard chess notation, space separated
         '''
 
-        self.moves = moves.split(" ")
-
         # Create dictionaries, and add special tokens
-        #   This is only done once
-        if hasattr(self, "word2idx") is False:
+        #   This is only done once, so we check the flag
+        if self.train_prep is False:
             self.word2idx = {
                 "[Open]": 0,
                 "[CheckMate]": 1,
@@ -58,29 +70,73 @@ class ChessTokenizer:
                 "[Resign]": 3,
                 "[StaleMate]": 4,
             }
+            self.train_prep = True
 
-            self.idx2word = {
-                0: "[Open]",
-                1: "[CheckMate]",
-                2: "[Draw]",
-                3: "[Resign]",
-                4: "[StaleMate]",
-            }
+        # Track the next value for the dictionary
+        self.next_value = max(self.word2idx.values()) + 1
 
-        # Learn tokens
-        for token in self.moves:
-            # Add the token to the dictionary if it is not already there
-            if token not in self.word2idx:
-                idx = len(self.word2idx)
-                self.word2idx[token] = idx
-                self.idx2word[idx] = token
+        # Train the tokenizer
+        for file in tqdm(file_list, desc="Total Progress", colour="green",):
+            moves = pgn_extract(file)
+            for idx, _ in enumerate(
+                tqdm(
+                    moves,
+                    desc="File Progress",
+                    leave=False,
+                    colour="yellow",
+                )
+            ):
+                # Learn the tokens
+                self.learn_tokens(moves[idx])
 
         # Save the mappings to JSON files
+        self.json_save(self.word2idx, self.idx2word)
+
+    def learn_tokens(self, moves: List[str]):
+        '''
+        Learn the tokens from the input text
+        This is a separate method to allow parallelism
+
+        Args:
+            moves: List of chess moves as strings
+        '''
+
+        # Split the moves into individual tokens
+        moves = moves.split(" ")
+
+        # Create temporary dictionaries
+        temp_word2idx = {}
+
+        # Learn tokens
+        for token in moves:
+            # Add the token to the dictionary if it is not already there
+            if token not in temp_word2idx:
+                idx = len(temp_word2idx)
+                temp_word2idx[token] = idx
+
+        # Merge forward mappings (unique values only)
+        for key in temp_word2idx.keys():
+            if key not in self.word2idx:
+                self.word2idx[key] = self.next_value
+                self.next_value += 1
+
+        # Create the reverse mapping (int: str)
+        self.idx2word = {v: k for k, v in self.word2idx.items()}
+
+    def json_save(self, word2idx: dict, idx2word: dict):
+        '''
+        Save the mappings to JSON files
+
+        Args:
+            word2idx: Dictionary mapping words to indices
+            idx2word: Dictionary mapping indices to words
+        '''
+
         with open("word2idx.json", "w") as f:
-            json.dump(self.word2idx, f)
+            json.dump(word2idx, f)
 
         with open("idx2word.json", "w") as f:
-            json.dump(self.idx2word, f)
+            json.dump(idx2word, f)
 
     def load(self):
         '''
@@ -96,6 +152,9 @@ class ChessTokenizer:
 
         # Convert string keys to integer
         self.idx2word = {int(k): v for k, v in self.idx2word.items()}
+
+        # Set the train_prep flag
+        self.train_prep = True
 
     def tokenize(self, text: str) -> List[int]:
         '''
@@ -182,7 +241,24 @@ def pgn_extract(file_path: str):
     return game_list
 
 
-if __name__ == "__main__":
+def confirm_mappings(tokenizer):
+    for word, idx in tokenizer.word2idx.items():
+        # Use the idx to get the corresponding word in idx2word
+        reverse_lookup_word = tokenizer.idx2word.get(idx)
+
+        # Check if the word matches the reverse lookup
+        if word != reverse_lookup_word:
+            print(f"Mismatch found: {word} -> {idx} -> {reverse_lookup_word}")
+            return False
+
+    print("All mappings and reverse mappings correspond correctly.")
+    return True
+
+
+# Wrap your main code block in a function for profiling
+def main():
+    start = time.perf_counter()
+
     # Create the tokenizer
     tokenizer = ChessTokenizer()
 
@@ -196,40 +272,25 @@ if __name__ == "__main__":
     ]
 
     # Train the tokenizer
-    for file in tqdm(file_list, desc="Total Progress", colour="green",):
-        moves = pgn_extract(file)
-        for idx, _ in enumerate(
-            tqdm(
-                moves,
-                desc="File Progress",
-                leave=False,
-                colour="yellow",
-            )
-        ):
-            tokenizer.train(moves[idx])
+    tokenizer.train(file_list)
 
-    # Get some stats
-    values = list(tokenizer.word2idx.values())
-    if len(values) != len(set(values)):
-        print("There are duplicate values in the word2idx dictionary.")
-        print(f"word2idx count: {len(values)}")
-        print(f"word2idx unique count: {len(set(values))}")
-    else:
-        print("There are no duplicate values in the word2idx dictionary.")
-        print(f"word2idx count: {len(tokenizer.word2idx)}")
+    # Check the mappings
+    confirm_mappings(tokenizer)
 
-    values = list(tokenizer.idx2word.values())
-    if len(values) != len(set(values)):
-        print("There are duplicate values in the idx2word dictionary.")
-        print(f"idx2word count: {len(values)}")
-        print(f"idx2word unique count: {len(set(values))}")
-    else:
-        print("There are no duplicate values in the dictionary.")
-        print(f"idx2word count: {len(tokenizer.idx2word)}")
+    finish = time.perf_counter()
+    print(f"Finished in {finish - start:.2f} seconds.")
+    # 4 files finished in 14.55 seconds, no parallelism
+    # 4 files finish in 0.88 seconds, no parallelism, JSON save moved outside of loop
+    #   10 in 4.82 seconds
+    #   50 in 32.63 seconds
+    # 50 in 31.16 seconds with optimized max() calls
 
-    # text = "e4 e5 Nf3 Nc6 Bc4 Bc5 Qe2 Qf6"
-    # token_ids = tokenizer.tokenize(text)
-    # print(token_ids)
 
-    # detokenized_text = tokenizer.detokenize(token_ids)
-    # print(detokenized_text)
+if __name__ == "__main__":
+    # Run normally
+    # main()
+
+    # Use profiling to analyze stats
+    cProfile.run('main()', 'profiling_results.stats')
+    p = pstats.Stats('profiling_results.stats')
+    p.sort_stats('cumulative').print_stats(10)
