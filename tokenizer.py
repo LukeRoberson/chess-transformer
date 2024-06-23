@@ -87,7 +87,7 @@ class ChessTokenizer:
                 )
             ):
                 # Learn the tokens
-                self.learn_tokens(moves[idx])
+                self.learn_tokens(moves[idx].split(" "))
 
         # Save the mappings to JSON files
         self.json_save(self.word2idx, self.idx2word)
@@ -101,18 +101,16 @@ class ChessTokenizer:
             moves: List of chess moves as strings
         '''
 
-        # Split the moves into individual tokens
-        moves = moves.split(" ")
-
-        # Create temporary dictionaries
+        # Create temporary set and dictionary
         temp_word2idx = {}
+        temp_tokens = set()
 
         # Learn tokens
         for token in moves:
-            # Add the token to the dictionary if it is not already there
-            if token not in temp_word2idx:
+            if token not in temp_tokens:
                 idx = len(temp_word2idx)
                 temp_word2idx[token] = idx
+                temp_tokens.add(token)
 
         # Merge forward mappings (unique values only)
         for key in temp_word2idx.keys():
