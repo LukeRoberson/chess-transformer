@@ -16,6 +16,9 @@ import pstats
 import time
 
 
+CHECKPOINT = 50
+
+
 class ChessTokenizer:
     '''
     Tokenizer for chess moves
@@ -84,6 +87,7 @@ class ChessTokenizer:
         self.next_value = max(self.word2idx.values()) + 1
 
         # Train the tokenizer
+        trained_files = []
         for file in tqdm(file_list, desc="Total Progress", colour="green"):
             moves = self.pgn_extract(file)
             for idx, _ in enumerate(
@@ -96,6 +100,17 @@ class ChessTokenizer:
             ):
                 # Learn the tokens
                 self.learn_tokens(moves[idx].split(" "))
+
+            trained_files.append(file.split("\\")[-1])
+            if len(trained_files) == CHECKPOINT:
+                self.save_resume(save_path, trained_files)
+                self.json_save(
+                    self.word2idx,
+                    self.idx2word,
+                    save_path,
+                    overwrite=True
+                )
+                trained_files = []
 
         # Save the mappings to JSON files
         self.json_save(self.word2idx, self.idx2word, save_path, overwrite)
@@ -152,7 +167,6 @@ class ChessTokenizer:
             os.path.exists(f"{save_path}\\idx2word.json")
         ):
             if overwrite:
-                print("Overwriting existing files.")
                 word2idx_path = f"{save_path}\\word2idx.json"
                 idx2word_path = f"{save_path}\\idx2word.json"
             else:
@@ -172,6 +186,7 @@ class ChessTokenizer:
             word2idx_path = f"{save_path}\\word2idx.json"
             idx2word_path = f"{save_path}\\idx2word.json"
 
+        # Save the files
         with open(word2idx_path, "w") as f:
             json.dump(word2idx, f)
 
@@ -195,6 +210,18 @@ class ChessTokenizer:
 
         # Set the train_prep flag
         self.train_prep = True
+
+    def save_resume(self, path: str, files: List[str]):
+        '''
+        Save the current state of the tokenizer to a resume file
+
+        Args:
+            path: Path to the resume file
+        '''
+
+        with open(f"{path}\\resume.txt", "a") as f:
+            for file in files:
+                f.write(f"{file}\n")
 
     def tokenize(self, text: str) -> List[int]:
         '''

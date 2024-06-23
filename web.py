@@ -41,17 +41,41 @@ def train_tokenizer(
     save_path,
     percentage=100,
     overwrite=False,
+    resume=False
 ):
     # Create the tokenizer
     tokenizer = ChessTokenizer()
 
-    # Select the files to use for training
+    # Get a list of all training files
     full_file_list = os.listdir(path)
+    full_size = len(full_file_list)
+
+    # Check if we can resume training
+    if resume and os.path.exists(os.path.join(save_path, "resume.txt")):
+        tokenizer.load()
+
+        # Read the resume file
+        with open(os.path.join(save_path, "resume.txt"), "r") as f:
+            resume = [line.strip() for line in f]
+
+        # Remove files from full_file_list if they exist in 'resume'
+        print(f"full:{full_file_list}")
+        print(f"resume: {resume}")
+        full_file_list = [
+            file
+            for file in full_file_list
+            if file not in resume
+        ]
+
+    else:
+        resume = False
+
+    # Select the files to use for training
     random.shuffle(full_file_list)
     file_list = full_file_list[:int(len(full_file_list) * (percentage / 100))]
 
     print(
-        f"Using {len(file_list)} out of {len(full_file_list)} files\
+        f"Using {len(file_list)} out of {full_size} files\
         for tokenizer training."
     )
 
@@ -115,6 +139,14 @@ with gr.Blocks() as token_tab:
             info="If checked, the existing JSON files will be overwritten. \
                 If unchecked, the files will be saved with a timestamp."
         )
+        chk_token_resume = gr.Checkbox(
+            label="Resume training",
+            value=False,
+            info="If checked, training will resume from the selected \
+                save location, if a resume file is found. \
+                If unchecked, or if there is no resume file, \
+                the tokenizer will be trained from scratch."
+        )
         btn_token_save.click(
             fn=dir_selector,
             inputs=txt_token_save,
@@ -136,6 +168,7 @@ with gr.Blocks() as token_tab:
                 txt_token_save,
                 sld_token_dataset,
                 chk_token_overwrite,
+                chk_token_resume,
             ]
         )
 
