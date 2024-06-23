@@ -40,7 +40,6 @@ def train_tokenizer(
     path,
     save_path,
     percentage=100,
-    overwrite=False,
     resume=False
 ):
     # Create the tokenizer
@@ -90,7 +89,6 @@ def train_tokenizer(
     tokenizer.train(
         file_list=file_list,
         save_path=save_path,
-        overwrite=overwrite
     )
 
 
@@ -133,12 +131,6 @@ with gr.Blocks() as token_tab:
         btn_token_save = gr.Button(
             value="Select save location",
         )
-        chk_token_overwrite = gr.Checkbox(
-            label="Overwrite existing files",
-            value=False,
-            info="If checked, the existing JSON files will be overwritten. \
-                If unchecked, the files will be saved with a timestamp."
-        )
         chk_token_resume = gr.Checkbox(
             label="Resume training",
             value=False,
@@ -167,7 +159,6 @@ with gr.Blocks() as token_tab:
                 txt_token_dataset,
                 txt_token_save,
                 sld_token_dataset,
-                chk_token_overwrite,
                 chk_token_resume,
             ]
         )

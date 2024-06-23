@@ -55,7 +55,6 @@ class ChessTokenizer:
         self,
         file_list: List[str],
         save_path: str = '.',
-        overwrite: bool = False
     ):
         '''
         Main training function
@@ -108,12 +107,11 @@ class ChessTokenizer:
                     self.word2idx,
                     self.idx2word,
                     save_path,
-                    overwrite=True
                 )
                 trained_files = []
 
         # Save the mappings to JSON files
-        self.json_save(self.word2idx, self.idx2word, save_path, overwrite)
+        self.json_save(self.word2idx, self.idx2word, save_path)
 
     def learn_tokens(self, moves: List[str]):
         '''
@@ -149,7 +147,6 @@ class ChessTokenizer:
         word2idx: dict,
         idx2word: dict,
         save_path: str = '.',
-        overwrite: bool = False
     ):
         '''
         Save the mappings to JSON files
@@ -162,29 +159,8 @@ class ChessTokenizer:
         '''
 
         # Check if word2idx.json exists in save_path
-        if (
-            os.path.exists(f"{save_path}\\word2idx.json") or
-            os.path.exists(f"{save_path}\\idx2word.json")
-        ):
-            if overwrite:
-                word2idx_path = f"{save_path}\\word2idx.json"
-                idx2word_path = f"{save_path}\\idx2word.json"
-            else:
-                count = 1
-                while (
-                    os.path.exists(f"{save_path}\\word2idx_{count}.json") or
-                    os.path.exists(f"{save_path}\\idx2word_{count}.json")
-                ):
-                    count += 1
-                word2idx_path = f"{save_path}\\word2idx_{count}.json"
-                idx2word_path = f"{save_path}\\idx2word_{count}.json"
-                print(
-                    f"Files already exist.\
-                    Saving as word2idx_{count}.json and idx2word_{count}.json"
-                )
-        else:
-            word2idx_path = f"{save_path}\\word2idx.json"
-            idx2word_path = f"{save_path}\\idx2word.json"
+        word2idx_path = f"{save_path}\\word2idx.json"
+        idx2word_path = f"{save_path}\\idx2word.json"
 
         # Save the files
         with open(word2idx_path, "w") as f:
