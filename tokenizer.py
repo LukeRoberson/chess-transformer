@@ -32,6 +32,7 @@ class ChessTokenizer:
         load: Loads the mappings from JSON files
         tokenize: Tokenizes the input text into a list of integers
         detokenize: Converts a list of integers (tokens) into a string
+        pgn_extract: Parse the JSON files
     '''
 
     def __init__(self):
@@ -47,7 +48,12 @@ class ChessTokenizer:
         # A counter to track the next item in the dictionary
         self.next_value = 1
 
-    def train(self, file_list: List[str]):
+    def train(
+        self,
+        file_list: List[str],
+        save_path: str = '.',
+        overwrite: bool = False
+    ):
         '''
         Main training function
 
@@ -56,8 +62,10 @@ class ChessTokenizer:
         Save the mappings to JSON files
 
         Args:
-            moves: List of chess moves as strings
+            file_list: List of files containing chess moves
                 In standard chess notation, space separated
+            save_path: Path to save the JSON files
+            overwrite: Flag to overwrite existing files
         '''
 
         # Create dictionaries, and add special tokens
@@ -76,8 +84,8 @@ class ChessTokenizer:
         self.next_value = max(self.word2idx.values()) + 1
 
         # Train the tokenizer
-        for file in tqdm(file_list, desc="Total Progress", colour="green",):
-            moves = pgn_extract(file)
+        for file in tqdm(file_list, desc="Total Progress", colour="green"):
+            moves = self.pgn_extract(file)
             for idx, _ in enumerate(
                 tqdm(
                     moves,
@@ -90,7 +98,7 @@ class ChessTokenizer:
                 self.learn_tokens(moves[idx].split(" "))
 
         # Save the mappings to JSON files
-        self.json_save(self.word2idx, self.idx2word)
+        self.json_save(self.word2idx, self.idx2word, save_path, overwrite)
 
     def learn_tokens(self, moves: List[str]):
         '''
@@ -121,19 +129,53 @@ class ChessTokenizer:
         # Create the reverse mapping (int: str)
         self.idx2word = {v: k for k, v in self.word2idx.items()}
 
-    def json_save(self, word2idx: dict, idx2word: dict):
+    def json_save(
+        self,
+        word2idx: dict,
+        idx2word: dict,
+        save_path: str = '.',
+        overwrite: bool = False
+    ):
         '''
         Save the mappings to JSON files
 
         Args:
             word2idx: Dictionary mapping words to indices
             idx2word: Dictionary mapping indices to words
+            save_path: Path to save the JSON files
+            overwrite: Flag to overwrite existing files
         '''
 
-        with open("word2idx.json", "w") as f:
+        # Check if word2idx.json exists in save_path
+        if (
+            os.path.exists(f"{save_path}\\word2idx.json") or
+            os.path.exists(f"{save_path}\\idx2word.json")
+        ):
+            if overwrite:
+                print("Overwriting existing files.")
+                word2idx_path = f"{save_path}\\word2idx.json"
+                idx2word_path = f"{save_path}\\idx2word.json"
+            else:
+                count = 1
+                while (
+                    os.path.exists(f"{save_path}\\word2idx_{count}.json") or
+                    os.path.exists(f"{save_path}\\idx2word_{count}.json")
+                ):
+                    count += 1
+                word2idx_path = f"{save_path}\\word2idx_{count}.json"
+                idx2word_path = f"{save_path}\\idx2word_{count}.json"
+                print(
+                    f"Files already exist.\
+                    Saving as word2idx_{count}.json and idx2word_{count}.json"
+                )
+        else:
+            word2idx_path = f"{save_path}\\word2idx.json"
+            idx2word_path = f"{save_path}\\idx2word.json"
+
+        with open(word2idx_path, "w") as f:
             json.dump(word2idx, f)
 
-        with open("idx2word.json", "w") as f:
+        with open(idx2word_path, "w") as f:
             json.dump(idx2word, f)
 
     def load(self):
@@ -209,34 +251,33 @@ class ChessTokenizer:
 
         return text
 
+    def pgn_extract(self, file_path: str):
+        '''
+        Parse the JSON files
+        This creates a list of moves without the metadata or move number
 
-def pgn_extract(file_path: str):
-    '''
-    Parse the JSON files
-    This creates a list of moves without the metadata or move number
+        Args:
+            file_path: Path to the JSON file
 
-    Args:
-        file_path: Path to the JSON file
+        Returns:
+            List of chess moves as strings
+                Each string is a complete game
+        '''
 
-    Returns:
-        List of chess moves as strings
-            Each string is a complete game
-    '''
+        with open(file_path, "r") as f:
+            moves = json.load(f)
 
-    with open(file_path, "r") as f:
-        moves = json.load(f)
+        # A list of complete games
+        game_list = []
 
-    # A list of complete games
-    game_list = []
+        # Parse the JSON file for games
+        year = list(moves.keys())[0]
+        for month in moves[year]:
+            for game in moves[year][month]:
+                game = re.sub(r"\d{1,3}\. ", "", game['pgn'])
+                game_list.append(game.strip())
 
-    # Parse the JSON file for games
-    year = list(moves.keys())[0]
-    for month in moves[year]:
-        for game in moves[year][month]:
-            game = re.sub(r"\d{1,3}\. ", "", game['pgn'])
-            game_list.append(game.strip())
-
-    return game_list
+        return game_list
 
 
 def confirm_mappings(tokenizer):
@@ -277,18 +318,15 @@ def main():
 
     finish = time.perf_counter()
     print(f"Finished in {finish - start:.2f} seconds.")
-    # 4 files finished in 14.55 seconds, no parallelism
-    # 4 files finish in 0.88 seconds, no parallelism, JSON save moved outside of loop
-    #   10 in 4.82 seconds
-    #   50 in 32.63 seconds
-    # 50 in 31.16 seconds with optimized max() calls
 
 
 if __name__ == "__main__":
-    # Run normally
-    # main()
+    profile = False
 
-    # Use profiling to analyze stats
-    cProfile.run('main()', 'profiling_results.stats')
-    p = pstats.Stats('profiling_results.stats')
-    p.sort_stats('cumulative').print_stats(10)
+    if profile:
+        cProfile.run('main()', 'profiling_results.stats')
+        p = pstats.Stats('profiling_results.stats')
+        p.sort_stats('cumulative').print_stats(10)
+
+    else:
+        main()

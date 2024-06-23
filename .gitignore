@@ -1,3 +1,5 @@
 /.venv
 /dataset
 profiling_results.stats
+*.pyc
+*.pyo
