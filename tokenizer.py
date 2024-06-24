@@ -30,6 +30,8 @@ class ChessTokenizer:
         We can't 'invent' different words, as the moves are standard
 
     Methods:
+        __init__: Initializes the tokenizer
+        __len__: Returns the size of the vocabulary
         train: Creates a mapping between words and indices
         learn_tokens: Learns the tokens from the input text
         json_save: Saves the mappings to JSON files
@@ -53,6 +55,18 @@ class ChessTokenizer:
 
         # A counter to track the next item in the dictionary
         self.next_value = 1
+
+    def __len__(self) -> int:
+        '''
+        Returns the size of the vocabulary, i.e., the number of unique tokens.
+        This allows us to call len(tokenizer) to get
+            the size of the vocabulary.
+
+        Returns:
+            The number of unique tokens in the vocabulary.
+        '''
+
+        return len(self.word2idx)
 
     def train(
         self,
