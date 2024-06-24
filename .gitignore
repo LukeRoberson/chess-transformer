@@ -5,3 +5,4 @@ profiling_results.stats
 *.pyo
 resume.txt
 /backup
+/flagged
