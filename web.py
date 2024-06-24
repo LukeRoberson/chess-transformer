@@ -1,3 +1,16 @@
+'''
+The Gradio front end for the Chess Transformer project
+Functions can be run manually, but this makes it easier to use
+
+Run the script to launch the interface,
+    then open a browser and go to the URL provided
+
+Contains three tabs:
+    (1) Tokenizer: Used to train the tokenizer
+    (2) Trainer: Used to train the model
+    (3) Generator: Used to generate chess moves
+'''
+
 import gradio as gr
 import tkinter as tk
 from tkinter import filedialog
@@ -6,9 +19,7 @@ from tokenizer import ChessTokenizer
 import random
 
 
-bye_world = gr.Interface(lambda name: "Bye " + name, "text", "text")
-
-
+# A stub function for tabs that aren't in use yet
 def update(name):
     return f"Welcome to Gradio, {name}!"
 
@@ -42,6 +53,18 @@ def train_tokenizer(
     percentage=100,
     resume=False
 ):
+    '''
+    Trains the tokenizer on the dataset
+    Requires access to the ChessTokenizer class, which does the real work
+    Optionally, we can train on a random subset of the dataset
+
+    Parameters:
+        path (str): The path to the dataset folder
+        save_path (str): The path to save the tokenizer
+        percentage (int): The percentage of files to use for training
+        resume (bool): If True, training will resume from the save path
+    '''
+
     # Create the tokenizer
     tokenizer = ChessTokenizer()
 
@@ -91,6 +114,12 @@ def train_tokenizer(
         save_path=save_path,
     )
 
+
+'''
+From this point on, we define the interface
+Gradio blocks define the tabs
+Within each block, we define groups for each section
+'''
 
 # The tokenizer tab
 with gr.Blocks() as token_tab:
@@ -164,7 +193,7 @@ with gr.Blocks() as token_tab:
         )
 
 
-# The training tab
+# The training tab - Stub area for now
 with gr.Blocks() as train_tab:
     gr.Markdown("Start typing below and then click **Run** to see the output.")
     with gr.Row():
@@ -174,7 +203,7 @@ with gr.Blocks() as train_tab:
     btn.click(fn=update, inputs=inp, outputs=out)
 
 
-# The generator tab
+# The generator tab - Stub area for now
 with gr.Blocks() as gen_tab:
     gr.Markdown("Start typing below and then click **Run** to see the output.")
     with gr.Row():
@@ -184,10 +213,13 @@ with gr.Blocks() as gen_tab:
     btn.click(fn=update, inputs=inp, outputs=out)
 
 
+# The main interface, with the tabs
 front_end = gr.TabbedInterface(
     [token_tab, train_tab, gen_tab],
     ["Tokenizer", "Trainer", "Generator"]
 )
 
+
+# Launch the interface
 if __name__ == "__main__":
     front_end.launch()

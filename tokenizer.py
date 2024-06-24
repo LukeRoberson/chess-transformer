@@ -17,6 +17,7 @@ import time
 
 
 CHECKPOINT = 50
+PROFILE = False
 
 
 class ChessTokenizer:
@@ -33,6 +34,7 @@ class ChessTokenizer:
         learn_tokens: Learns the tokens from the input text
         json_save: Saves the mappings to JSON files
         load: Loads the mappings from JSON files
+        save_resume: Saves the current state of the tokenizer to a resume file
         tokenize: Tokenizes the input text into a list of integers
         detokenize: Converts a list of integers (tokens) into a string
         pgn_extract: Parse the JSON files
@@ -40,9 +42,10 @@ class ChessTokenizer:
 
     def __init__(self):
         '''
-        The constructor
         The train_prep flag is used to check if the mappings have been started
             This allows training to resume
+        next_value is used to track the next item in the dict during training
+            This is an optimization as training can take a very long time
         '''
 
         # Set the train_prep flag
@@ -67,7 +70,6 @@ class ChessTokenizer:
             file_list: List of files containing chess moves
                 In standard chess notation, space separated
             save_path: Path to save the JSON files
-            overwrite: Flag to overwrite existing files
         '''
 
         # Create dictionaries, and add special tokens
@@ -100,6 +102,7 @@ class ChessTokenizer:
                 # Learn the tokens
                 self.learn_tokens(moves[idx].split(" "))
 
+            # Keep track of the files trained, enabling resuming
             trained_files.append(file.split("\\")[-1])
             if len(trained_files) == CHECKPOINT:
                 self.save_resume(save_path, trained_files)
@@ -117,6 +120,7 @@ class ChessTokenizer:
         '''
         Learn the tokens from the input text
         This is a separate method to allow parallelism
+            However, experimentally, this is not faster
 
         Args:
             moves: List of chess moves as strings
@@ -150,15 +154,15 @@ class ChessTokenizer:
     ):
         '''
         Save the mappings to JSON files
+        If the files already exist, they will be overwritten
 
         Args:
             word2idx: Dictionary mapping words to indices
             idx2word: Dictionary mapping indices to words
             save_path: Path to save the JSON files
-            overwrite: Flag to overwrite existing files
         '''
 
-        # Check if word2idx.json exists in save_path
+        # Create the save path
         word2idx_path = f"{save_path}\\word2idx.json"
         idx2word_path = f"{save_path}\\idx2word.json"
 
@@ -175,6 +179,7 @@ class ChessTokenizer:
         JSON files use strings, so the keys need to be converted to integers
         '''
 
+        # Open the files, and load the forward and  mappings
         with open("word2idx.json", "r") as f:
             self.word2idx = json.load(f)
 
@@ -195,6 +200,7 @@ class ChessTokenizer:
             path: Path to the resume file
         '''
 
+        # Just open the resume file and append the files
         with open(f"{path}\\resume.txt", "a") as f:
             for file in files:
                 f.write(f"{file}\n")
@@ -258,6 +264,7 @@ class ChessTokenizer:
         '''
         Parse the JSON files
         This creates a list of moves without the metadata or move number
+            Basically, a space-delimited list of tokens
 
         Args:
             file_path: Path to the JSON file
@@ -284,6 +291,11 @@ class ChessTokenizer:
 
 
 def confirm_mappings(tokenizer):
+    '''
+    A simple function for debugging
+    This confirms that the forward and reverse mappings align correctly
+    '''
+
     for word, idx in tokenizer.word2idx.items():
         # Use the idx to get the corresponding word in idx2word
         reverse_lookup_word = tokenizer.idx2word.get(idx)
@@ -297,8 +309,13 @@ def confirm_mappings(tokenizer):
     return True
 
 
-# Wrap your main code block in a function for profiling
 def main():
+    '''
+    Main function to train the tokenizer when run as a script
+    This exists for debugging purposes, and to allow profiling
+    Set PROFILE to True to enable profiling
+    '''
+
     start = time.perf_counter()
 
     # Create the tokenizer
@@ -324,9 +341,12 @@ def main():
 
 
 if __name__ == "__main__":
-    profile = False
+    '''
+    Only used if this is run as a script
+    Set PROFILE to True to enable profiling
+    '''
 
-    if profile:
+    if PROFILE:
         cProfile.run('main()', 'profiling_results.stats')
         p = pstats.Stats('profiling_results.stats')
         p.sort_stats('cumulative').print_stats(10)
