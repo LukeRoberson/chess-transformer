@@ -56,6 +56,9 @@ class ChessTokenizer:
         # A counter to track the next item in the dictionary
         self.next_value = 1
 
+        # The padding token
+        self.pad = "[Pad]"
+
     def __len__(self) -> int:
         '''
         Returns the size of the vocabulary, i.e., the number of unique tokens.
@@ -236,12 +239,18 @@ class ChessTokenizer:
 
         tokens = text.split()
         token_ids = [
+            # Prepend the [Start] token's ID
+            self.word2idx['[Start]'],
             # (3) Puts the token into the list
-            self.word2idx[token]
-            # (1) Iterate over the tokens
-            for token in tokens
-            # (2) Check if the token is in the dict
-            if token in self.word2idx
+            *[
+                self.word2idx[token]
+                # (1) Iterate over the tokens
+                for token in tokens
+                # (2) Check if the token is in the dict
+                if token in self.word2idx
+            ],
+            # Append the [End] token's ID
+            self.word2idx['[End]']
         ]
 
         return token_ids
@@ -260,11 +269,20 @@ class ChessTokenizer:
             Single string representing the chess moves
         '''
 
+        # Filter out the token IDs for [Start] and [End] tokens
+        filtered_token_ids = [
+            token_id for token_id in token_ids
+            if token_id not in (
+                self.word2idx['[Start]'],
+                self.word2idx['[End]']
+            )
+        ]
+
         tokens = [
             # (3) Adds the token to the list
             self.idx2word[token_id]
             # (1) Looks through the tokens list
-            for token_id in token_ids
+            for token_id in filtered_token_ids
             # (2) Checks if the token is in the dict
             if token_id in self.idx2word
         ]
