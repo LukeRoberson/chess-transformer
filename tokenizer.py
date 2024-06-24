@@ -90,11 +90,11 @@ class ChessTokenizer:
         #   This is only done once, so we check the flag
         if self.train_prep is False:
             self.word2idx = {
-                "[Open]": 0,
-                "[CheckMate]": 1,
-                "[Draw]": 2,
-                "[Resign]": 3,
-                "[StaleMate]": 4,
+                "[Start]": 0,
+                "[End]": 1,
+                "[Pad]": 2,
+                "[Unk]": 3,
+                "[Mask]": 4,
             }
             self.train_prep = True
 

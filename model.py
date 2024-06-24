@@ -3,10 +3,15 @@ Build and train a transformer model
 '''
 
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 from transformer_blocks import GPTLanguageModel
 from transformer_blocks import GPTConfig
 from tokenizer import ChessTokenizer
+from sklearn.model_selection import train_test_split
+import os
+import re
+import json
 
 
 # Set up the model config
@@ -28,53 +33,76 @@ print(f'using device: {config.device}')
 # Set up the tokenizer
 tokenizer = ChessTokenizer()
 tokenizer.load()
+vocab_size = len(tokenizer)
+
+# Dataset management
+dataset_dir = './dataset'
+game_list = []
+
+for file in tqdm(os.listdir(dataset_dir), desc='Finding JSON files'):
+    if file.endswith('.json'):
+        try:
+            with open(f"{dataset_dir}/{file}", "r") as f:
+                moves = json.load(f)
+
+            # Parse the JSON file for games
+            year = list(moves.keys())[0]
+            for month in moves[year]:
+                for game in moves[year][month]:
+                    game = re.sub(r"\d{1,3}\. ", "", game['pgn']).strip()
+                    game_list.append(tokenizer.tokenize(game))
+
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Error processing file {file}: {e}")
+
+# Get input and target sequences
+#   Target is input shifted right by one token
+input_sequences = []
+target_sequences = []
+
+for game in game_list:
+    input_sequences.append(game[:-1])
+    target_sequences.append(game[1:])
+
+# Split input_sequences and target_sequences into training and testing sets
+train_data, test_data, train_labels, test_labels = train_test_split(
+    input_sequences,
+    target_sequences,
+    test_size=0.2,
+    random_state=42
+)
+
+# Create tensor datasets
+train_dataset = TensorDataset(
+     torch.Tensor(train_data),
+     torch.Tensor(train_labels)
+)
+test_dataset = TensorDataset(
+     torch.Tensor(test_data),
+     torch.Tensor(test_labels)
+)
+
+# Create data loaders
+train_loader = DataLoader(train_dataset, batch_size=4)
+test_loader = DataLoader(test_dataset)
 
 
-
-
-
-with open('input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-
-# here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
-vocab_size = len(chars)
-
-# create a mapping from characters to integers
-stoi = {ch: i for i, ch in enumerate(chars)}
-itos = {i: ch for i, ch in enumerate(chars)}
-
-# encoder: take a string, output a list of integers
-def encode(string):
-    return [stoi[c] for c in string]
-
-
-# decoder: take a list of integers, output a string
-def decode(int_list):
-    return ''.join([itos[i] for i in int_list])
-
-
-
-
-
-
-
-# Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long)
-n = int(0.9 * len(data))  # first 90% will be train, rest val
-train_data = data[:n]
-val_data = data[n:]
-
-
-# data loading
 def get_batch(split):
-    # generate a small batch of data of inputs x and targets y
-    data = train_data if split == 'train' else val_data
-    ix = torch.randint(len(data) - config.block_size, (config.batch_size,))
-    x = torch.stack([data[i: i + config.block_size] for i in ix])
-    y = torch.stack([data[i + 1: i + config.block_size + 1] for i in ix])
+    dataloader = train_loader if split == 'train' else test_loader
+    data_iter = iter(dataloader)
+    x, y = next(data_iter)
     x, y = x.to(config.device), y.to(config.device)
     return x, y
+
+
+# def get_batch(split):
+#     # generate a small batch of data of inputs x and targets y
+#     data = train_data if split == 'train' else val_data
+#     ix = torch.randint(len(data) - config.block_size, (config.batch_size,))
+#     x = torch.stack([data[i: i + config.block_size] for i in ix])
+#     y = torch.stack([data[i + 1: i + config.block_size + 1] for i in ix])
+#     x, y = x.to(config.device), y.to(config.device)
+#     return x, y
 
 
 @torch.no_grad()
@@ -85,7 +113,7 @@ def estimate_loss():
         losses = torch.zeros(config.eval_iters)
         for k in range(config.eval_iters):
             X, Y = get_batch(split)
-            logits, loss = model(X, Y)
+            _, loss = model(X, Y)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -122,4 +150,4 @@ for iter in tqdm(range(config.max_iters)):
 
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+print(tokenizer.decode(m.generate(context, max_new_tokens=500)[0].tolist()))
