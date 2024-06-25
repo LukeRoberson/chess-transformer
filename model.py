@@ -4,21 +4,24 @@ Build and train a transformer model
 Use the GPTConfig class to track hyperparameters and GPT architecture
 '''
 
-import torch
-from torch.utils.data import TensorDataset, DataLoader
-from tqdm import tqdm
 from transformer_blocks import GPTLanguageModel
 from transformer_blocks import GPTConfig
 from tokenizer import ChessTokenizer
-from sklearn.model_selection import train_test_split
-import os
-import re
-import json
+from dataset import DataSet
 
+import torch
+from tqdm import tqdm
+
+
+# Set up the tokenizer
+tokenizer = ChessTokenizer()
+tokenizer.load()
+vocab_size = len(tokenizer)
 
 # Set up the model config
 config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
+    tokenizer=tokenizer,
     batch_size=64,
     block_size=384,
     max_iters=500,
@@ -32,82 +35,22 @@ config = GPTConfig(
 )
 print(f'using device: {config.device}')
 
-# Set up the tokenizer
-tokenizer = ChessTokenizer()
-tokenizer.load()
-vocab_size = len(tokenizer)
-
 # Dataset management
-dataset_dir = './dataset'
-game_list = []
-
-max_length = 0
-for file in tqdm(os.listdir(dataset_dir), desc='Finding JSON files'):
-    if file.endswith('.json'):
-        try:
-            with open(f"{dataset_dir}/{file}", "r") as f:
-                moves = json.load(f)
-
-            # Parse the JSON file for games
-            year = list(moves.keys())[0]
-            for month in moves[year]:
-                for game in moves[year][month]:
-                    game = re.sub(r"\d{1,3}\. ", "", game['pgn']).strip()
-                    game_list.append(game)
-
-                    # Find the maximum length of a game
-                    if len(tokenizer.tokenize(game)) > max_length:
-                        max_length = len(tokenizer.tokenize(game))
-
-        except (IOError, json.JSONDecodeError) as e:
-            print(f"Error processing file {file}: {e}")
-
-# Tokenize and pad each game list to the maximum length
-#   This means all lists are the same size
-#   This is needed to convert to tensor later
-padded_game_list = [
-    tokenizer.tokenize(game, pad=True, pad_size=max_length)
-    for game in game_list
-]
-
-# Get input and target sequences
-#   Target is input shifted right by one token
-input_sequences = []
-target_sequences = []
-
-for game in padded_game_list:
-    input_sequences.append(game[:-1])
-    target_sequences.append(game[1:])
-
-# Split input_sequences and target_sequences into training and testing sets
-train_data, test_data, train_labels, test_labels = train_test_split(
-    input_sequences,
-    target_sequences,
-    test_size=0.2,
-    random_state=42
+chess_dataset = DataSet(
+    config,
+    dataset_dir='./dataset',
 )
-
-# Create tensor datasets
-train_dataset = TensorDataset(
-     torch.Tensor(train_data),
-     torch.Tensor(train_labels)
-)
-test_dataset = TensorDataset(
-     torch.Tensor(test_data),
-     torch.Tensor(test_labels)
-)
-
-# Create data loaders
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=config.batch_size,
-    shuffle=True
-)
-test_loader = DataLoader(test_dataset)
+chess_dataset.load()
+chess_dataset.split(test_size=0.2)
+chess_dataset.create_dataloaders()
 
 
 def get_batch(split):
-    data_loader = train_loader if split == 'train' else test_loader
+    data_loader = (
+        chess_dataset.train_dataloader
+        if split == 'train'
+        else chess_dataset.test_dataloader
+    )
 
     for x, y in data_loader:
         x, y = x.to(config.device), y.to(config.device)

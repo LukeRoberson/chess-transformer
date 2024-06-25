@@ -16,3 +16,8 @@
 ## Transformer
 * Add padding to datasets so they are the same length
 * Transformer to ignore "[Pad]" during training
+* Add Ctrl-C handling
+
+## Dataset
+* Add an optional max game size option
+* Move the get_batch() function to the DataSet class

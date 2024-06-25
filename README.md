@@ -82,3 +82,29 @@ Call the load() method to load the JSON files back into the object. This makes t
 The tokenize() method will convert a string into a list tokens.
 
 The detokenize() method will convert from a list of tokens to a string.
+
+## Transformer
+
+The transformer is primarily implemented in two files:
+* transformer_blocks.py - The classes used to build the transformer
+* model.py - The code to build the model architecture, load tokenizer, load dataset, and train the model
+
+### Creating a Model
+
+1. Load a tokenizer
+2. Create model configuration using the GPTConfig class
+3. Prepare a dataset 
+4. Create the model, optimizer, etc
+
+### Dataset Preparation
+
+The dataset.py file contains the DataSet() class. This loads and prepares the dataset into dataloaders that the model can use.
+
+1. Create an instance of the DataSet class, passing the GPTConfig object, and optionally specifying the location of the dataset ('./dataset' is used by default)
+2. Run the load() method to read the JSON files, and extract the games
+3. Run the split() method to split the dataset into train and test sets. Optionally pass the 'test_size=' parameter to define the split (0.2, or 20%, is the default)
+4. Run the create_dataloaders() method to load the dataset in to standardised PyTorch dataloader structures
+
+There are two dataloaders that can be accessed from the class:
+* train_dataloader
+* test_dataloader

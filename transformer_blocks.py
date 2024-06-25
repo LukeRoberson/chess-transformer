@@ -201,6 +201,7 @@ class GPTConfig():
     def __init__(
         self,
         device,
+        tokenizer,
         batch_size=64,
         block_size=256,
         max_iters=5000,
@@ -218,6 +219,9 @@ class GPTConfig():
         Args:
             device: torch.device
                 'cuda' or 'cpu'
+
+            tokenizer: ChessTokenizer
+                Tokenizer for the model
 
             batch_size: int
                 The size of the batch sent to the model
@@ -255,6 +259,8 @@ class GPTConfig():
         '''
 
         self.device = device
+        self.tokenizer = tokenizer
+
         self.batch_size = batch_size
         self.block_size = block_size
         self.max_iters = max_iters
