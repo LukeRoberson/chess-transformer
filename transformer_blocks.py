@@ -112,17 +112,21 @@ class GPTLanguageModel(nn.Module):
         super().__init__()
         self.device = config.device
         self.block_size = config.block_size
+        self.pad_token = config.pad_token
 
-        # each token directly reads off the logits
-        #   for the next token from a lookup table
+        # An embedding layer is a 2D tensor
+        #   Each row is a vector that represents a token
+        #   The embedding table is trained with each forward pass and backprop
         self.token_embedding_table = nn.Embedding(
             vocab_size,
             config.n_embd
         )
+
         self.position_embedding_table = nn.Embedding(
             config.block_size,
             config.n_embd
         )
+
         self.blocks = nn.Sequential(
             *[
                 Block(config)
@@ -145,15 +149,38 @@ class GPTLanguageModel(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
-        # B is Batch (batch size, such as 64 or 128)
-        # T is 'Time' (sequence length, for example 256 for context)
-        # C is the number of channels (or dimensions in the embedding)
+        '''
+        The forward pass of the model
+            When the model is called, the forward pass is executed
+            This could be for training or inference
+            No targets are passed for inference
 
+        This method works heavily with tensors. Three dimensions are used:
+            B: Batch size
+            T: Sequence length (AKA 'time')
+            C: Number of channels (or dimensions in the embedding)
+
+        Loss is calculated with the cross-entropy loss function
+            This ignores the 'pad' token when learning
+
+        Args:
+            idx: torch.Tensor
+                The input tensor
+                The indices of the tokens in the context
+
+            targets: torch.Tensor
+                The target tensor
+                The indices of the tokens in the context
+        '''
+
+        # Get the batch size and sequence length as B, T
         B, T = idx.shape
 
         # idx and targets are both (B,T) tensor of integers
+        ''' Learn more about this '''
         tok_emb = self.token_embedding_table(idx.long())  # (B,T,C)
 
+        ''' Learn more about this '''
         pos_emb = self.position_embedding_table(
             torch.arange(T, device=self.device)
         )  # (T,C)
@@ -169,7 +196,14 @@ class GPTLanguageModel(nn.Module):
             B, T, C = logits.shape
             logits = logits.view(B*T, C)
             targets = targets.view(B*T).long()
-            loss = F.cross_entropy(logits, targets)
+
+            # Calculate the loss
+            #   The ignore_index is a special token that should be ignored
+            #   ([Pad] token in our case)
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1), ignore_index=self.pad_token
+            )
 
         return logits, loss
 
@@ -211,7 +245,8 @@ class GPTConfig():
         n_embd=384,
         n_head=4,
         n_layer=4,
-        dropout=0.2
+        dropout=0.2,
+        pad_token=0,
     ):
         '''
         Setup the hyperparameters for the model
@@ -256,6 +291,10 @@ class GPTConfig():
             dropout: float
                 Dropout rate for the model
                 A type of regularization
+
+            pad_token: int
+                The token for padding
+                This is the token number used for padding sequences
         '''
 
         self.device = device
@@ -271,3 +310,5 @@ class GPTConfig():
         self.n_head = n_head
         self.n_layer = n_layer
         self.dropout = dropout
+
+        self.pad_token = pad_token

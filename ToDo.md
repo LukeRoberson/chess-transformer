@@ -17,6 +17,8 @@
 * Add padding to datasets so they are the same length
 * Transformer to ignore "[Pad]" during training
 * Add Ctrl-C handling
+* Move the estimate_loss() function to the GPT model class
+* Move the training loop into the GPT model class
 
 ## Dataset
 * Add an optional max game size option

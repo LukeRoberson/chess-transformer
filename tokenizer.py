@@ -58,6 +58,7 @@ class ChessTokenizer:
 
         # The padding token
         self.pad = "[Pad]"
+        self.pad_number = 2
 
     def __len__(self) -> int:
         '''

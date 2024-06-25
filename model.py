@@ -22,7 +22,7 @@ vocab_size = len(tokenizer)
 config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=64,
+    batch_size=32,
     block_size=384,
     max_iters=500,
     eval_interval=250,
@@ -31,7 +31,8 @@ config = GPTConfig(
     n_embd=256,
     n_head=2,
     n_layer=2,
-    dropout=0.2
+    dropout=0.2,
+    pad_token=tokenizer.pad_token,
 )
 print(f'using device: {config.device}')
 
@@ -81,18 +82,25 @@ print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 # create a PyTorch optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
 
+# Training loop
 for iter in tqdm(range(config.max_iters)):
-
     # every once in a while evaluate the loss on train and val sets
-    if iter % config.eval_interval == 0 or iter == config.max_iters - 1:
+    if (
+        (iter % config.eval_interval == 0 and iter != 0) or
+        iter == config.max_iters
+    ):
         losses = estimate_loss()
         print(
             f"step {iter}: train loss {losses['train']:.4f},\
             val loss {losses['val']:.4f}"
         )
 
-    # sample a batch of data
+    # Get a batch of training data
     xb, yb = get_batch('train')
+
+    # Generate a mask for the input batch
+    #   '[Pad]' tokens (2) are ignored in loss calculation
+    mask = (xb != 2).float()
 
     # evaluate the loss
     logits, loss = model(xb, yb)
@@ -106,7 +114,7 @@ print(
     tokenizer.detokenize(
         m.generate(
             context,
-            max_new_tokens=500
+            max_new_tokens=50
         )[0].tolist()
     )
 )
