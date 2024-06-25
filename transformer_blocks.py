@@ -145,13 +145,19 @@ class GPTLanguageModel(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
+        # B is Batch (batch size, such as 64 or 128)
+        # T is 'Time' (sequence length, for example 256 for context)
+        # C is the number of channels (or dimensions in the embedding)
+
         B, T = idx.shape
 
         # idx and targets are both (B,T) tensor of integers
-        tok_emb = self.token_embedding_table(idx)  # (B,T,C)
+        tok_emb = self.token_embedding_table(idx.long())  # (B,T,C)
+
         pos_emb = self.position_embedding_table(
             torch.arange(T, device=self.device)
         )  # (T,C)
+
         x = tok_emb + pos_emb  # (B,T,C)
         x = self.blocks(x)  # (B,T,C)
         x = self.ln_f(x)  # (B,T,C)
@@ -162,7 +168,7 @@ class GPTLanguageModel(nn.Module):
         else:
             B, T, C = logits.shape
             logits = logits.view(B*T, C)
-            targets = targets.view(B*T)
+            targets = targets.view(B*T).long()
             loss = F.cross_entropy(logits, targets)
 
         return logits, loss

@@ -1,5 +1,7 @@
 '''
 Build and train a transformer model
+
+Use the GPTConfig class to track hyperparameters and GPT architecture
 '''
 
 import torch
@@ -17,8 +19,8 @@ import json
 # Set up the model config
 config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
-    batch_size=256,
-    block_size=256,
+    batch_size=64,
+    block_size=384,
     max_iters=500,
     eval_interval=250,
     learning_rate=3e-4,
@@ -39,6 +41,7 @@ vocab_size = len(tokenizer)
 dataset_dir = './dataset'
 game_list = []
 
+max_length = 0
 for file in tqdm(os.listdir(dataset_dir), desc='Finding JSON files'):
     if file.endswith('.json'):
         try:
@@ -50,17 +53,29 @@ for file in tqdm(os.listdir(dataset_dir), desc='Finding JSON files'):
             for month in moves[year]:
                 for game in moves[year][month]:
                     game = re.sub(r"\d{1,3}\. ", "", game['pgn']).strip()
-                    game_list.append(tokenizer.tokenize(game))
+                    game_list.append(game)
+
+                    # Find the maximum length of a game
+                    if len(tokenizer.tokenize(game)) > max_length:
+                        max_length = len(tokenizer.tokenize(game))
 
         except (IOError, json.JSONDecodeError) as e:
             print(f"Error processing file {file}: {e}")
+
+# Tokenize and pad each game list to the maximum length
+#   This means all lists are the same size
+#   This is needed to convert to tensor later
+padded_game_list = [
+    tokenizer.tokenize(game, pad=True, pad_size=max_length)
+    for game in game_list
+]
 
 # Get input and target sequences
 #   Target is input shifted right by one token
 input_sequences = []
 target_sequences = []
 
-for game in game_list:
+for game in padded_game_list:
     input_sequences.append(game[:-1])
     target_sequences.append(game[1:])
 
@@ -83,26 +98,20 @@ test_dataset = TensorDataset(
 )
 
 # Create data loaders
-train_loader = DataLoader(train_dataset, batch_size=4)
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=config.batch_size,
+    shuffle=True
+)
 test_loader = DataLoader(test_dataset)
 
 
 def get_batch(split):
-    dataloader = train_loader if split == 'train' else test_loader
-    data_iter = iter(dataloader)
-    x, y = next(data_iter)
-    x, y = x.to(config.device), y.to(config.device)
-    return x, y
+    data_loader = train_loader if split == 'train' else test_loader
 
-
-# def get_batch(split):
-#     # generate a small batch of data of inputs x and targets y
-#     data = train_data if split == 'train' else val_data
-#     ix = torch.randint(len(data) - config.block_size, (config.batch_size,))
-#     x = torch.stack([data[i: i + config.block_size] for i in ix])
-#     y = torch.stack([data[i + 1: i + config.block_size + 1] for i in ix])
-#     x, y = x.to(config.device), y.to(config.device)
-#     return x, y
+    for x, y in data_loader:
+        x, y = x.to(config.device), y.to(config.device)
+        return x, y
 
 
 @torch.no_grad()
@@ -150,4 +159,11 @@ for iter in tqdm(range(config.max_iters)):
 
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=config.device)
-print(tokenizer.decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+print(
+    tokenizer.detokenize(
+        m.generate(
+            context,
+            max_new_tokens=500
+        )[0].tolist()
+    )
+)

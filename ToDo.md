@@ -2,12 +2,17 @@
 
 ## Tokenizer
 * Specify a path to load the tokenizer
-* Encode: Wrap in start and end tokens
-* Decode: Remove start and end tokens
-* Add a PAD token
+* Decode: Remove PAD token
+* Consider whether we need '#' (Check) in tokens
+    * This could be added externally when moved are validated
+* Consider adding different types of end tokens
+    * These can match the way the game ends
 
 ## Front End
 * Path to load the tokenizer
+* Hyperparameters for training
+* Maybe add profiles for common architectures
 
 ## Transformer
 * Add padding to datasets so they are the same length
+* Transformer to ignore "[Pad]" during training

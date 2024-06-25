@@ -222,7 +222,12 @@ class ChessTokenizer:
             for file in files:
                 f.write(f"{file}\n")
 
-    def tokenize(self, text: str) -> List[int]:
+    def tokenize(
+        self,
+        text: str,
+        pad: bool = False,
+        pad_size: int = 0
+    ) -> List[int]:
         '''
         Tokenizes the input text into a list of integers
 
@@ -252,6 +257,11 @@ class ChessTokenizer:
             # Append the [End] token's ID
             self.word2idx['[End]']
         ]
+
+        if pad:
+            token_ids += (
+                [self.word2idx[self.pad]] * (pad_size - len(token_ids))
+            )
 
         return token_ids
 
