@@ -6,6 +6,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from tokenizer import ChessTokenizer
+
+from typing import Optional, Tuple
+
 
 class Head(nn.Module):
     """ one head of self-attention """
@@ -106,38 +110,70 @@ class Block(nn.Module):
 class GPTLanguageModel(nn.Module):
     def __init__(
         self,
-        config,
-        vocab_size
-    ):
+        config: 'GPTConfig',
+        vocab_size: int,
+    ) -> None:
+        '''
+        Initializes the GPT model.
+
+        Sets up the GPT model for language modeling by:
+            (1) Create an embedding layer for the tokens
+                Tracks tokens semantic meanings
+            (2) Create an embedding layer for the positions
+                Understand the sequence of tokens
+            (3) Create a series of transformer blocks
+            (4) Create a final normalization layer
+                Stabalize activation functions
+                Keeps values in a reasonable range
+            (5) Create a linear layer for the output
+                Maps the embeddings to the vocabulary size
+                Producing logits for the next token prediction.
+            (6) Initialize the weights of the model
+
+        Args:
+            config: GPTConfig
+                The hyperparameters for the model
+                'config' helps add flexibility to the model
+
+            vocab_size: int
+                The size of the vocabulary
+                This is the number of unique tokens in the dataset
+        '''
+
         super().__init__()
         self.device = config.device
         self.block_size = config.block_size
         self.pad_token = config.pad_token
 
-        # An embedding layer is a 2D tensor
-        #   Each row is a vector that represents a token
-        #   The embedding table is trained with each forward pass and backprop
+        # Embedding layer for tokens; Essentially a 2D tensor
+        #   A trainable matrix where each row represents a token
         self.token_embedding_table = nn.Embedding(
             vocab_size,
             config.n_embd
         )
 
+        # An embedding layer for token positions; 2D tensor
+        #   Trainable matrix to understand the sequence of tokens
         self.position_embedding_table = nn.Embedding(
             config.block_size,
             config.n_embd
         )
 
+        # Create a series of transformer blocks (core of the transformer)
         self.blocks = nn.Sequential(
             *[
                 Block(config)
                 for _ in range(config.n_layer)
             ]
         )
-        self.ln_f = nn.LayerNorm(config.n_embd)  # final layer norm
+
+        # Normalization layer
+        self.ln_f = nn.LayerNorm(config.n_embd)
+
+        # Linear transformation layer
         self.lm_head = nn.Linear(config.n_embd, vocab_size)
 
-        # better init, not covered in the original GPT video,
-        #   but important, will cover in followup video
+        # Initialize the weights of the model
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -148,7 +184,11 @@ class GPTLanguageModel(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
+    def forward(
+        self,
+        idx: torch.Tensor,
+        targets: Optional[torch.tensor] = None
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         '''
         The forward pass of the model
             When the model is called, the forward pass is executed
@@ -160,39 +200,77 @@ class GPTLanguageModel(nn.Module):
             T: Sequence length (AKA 'time')
             C: Number of channels (or dimensions in the embedding)
 
+        Tensors are passed through the layers that were defined in __init__
+            Embeddings, blocks, normalization, and linear layers
+
         Loss is calculated with the cross-entropy loss function
+            Requires the logits and targets to be in a particular shape
             This ignores the 'pad' token when learning
 
         Args:
             idx: torch.Tensor
-                The input tensor
-                The indices of the tokens in the context
+                A batch of indices of the tokens in the sequence
+                Shape: (B, T)
 
             targets: torch.Tensor
-                The target tensor
-                The indices of the tokens in the context
+                The indices of the tokens in the target sequence
+                Shape: (B, T)
+                Not needed for inference
+
+        Returns:
+            A tuple of (logits, loss):
+            logits: torch.Tensor
+                The model's predictions for the next token in each sequence.
+                Shape: (B, T, vocab_size).
+            loss: torch.Tensor or None
+                The calculated loss if targets are provided.
+                None during inference
         '''
 
         # Get the batch size and sequence length as B, T
         B, T = idx.shape
 
-        # idx and targets are both (B,T) tensor of integers
-        ''' Learn more about this '''
+        # 'idx' is a tensor, with a batch of token numbers (B, T)
+        #   Each token is mapped to an embedding vector
+        #   This creates a new token embedding tensor (B, T, C)
         tok_emb = self.token_embedding_table(idx.long())  # (B,T,C)
 
-        ''' Learn more about this '''
+        '''
+        Creates a 2D tensor (T, C) of position embeddings for the sequence
+        torch.arrange creates a sequence of numbers in a tensor
+            In this case, from 0 to T-1 (sequence length)
+            This is passed to the position embedding table
+        Reshaping
+            Each row is a vector that represents a position in the sequence
+            The number of rows (T) corresponds to the sequence length
+            The number of columns (C) corresponds to the embedding size
+        '''
         pos_emb = self.position_embedding_table(
             torch.arange(T, device=self.device)
-        )  # (T,C)
+        )
 
-        x = tok_emb + pos_emb  # (B,T,C)
-        x = self.blocks(x)  # (B,T,C)
-        x = self.ln_f(x)  # (B,T,C)
-        logits = self.lm_head(x)  # (B,T,vocab_size)
+        # Combine the token and position embeddings (B, T, C)
+        transformed_embeddings = tok_emb + pos_emb
 
+        # Pass the embeddings through the transformer blocks
+        transformed_embeddings = self.blocks(transformed_embeddings)
+
+        # Pass through the normalization layer
+        transformed_embeddings = self.ln_f(transformed_embeddings)
+
+        # Pass through the linear layer to get the logits
+        #   Predicts the next token in the sequence (B, T, vocab_size)
+        logits = self.lm_head(transformed_embeddings)
+
+        # Calculate the loss, unless inferencing
         if targets is None:
             loss = None
+
+        # Training, so calculate the loss
         else:
+            # Reshape logits and targets tensors to suit the loss function
+            #   Input (logits) should be 2D
+            #   Target should be 1D
             B, T, C = logits.shape
             logits = logits.view(B*T, C)
             targets = targets.view(B*T).long()
@@ -201,8 +279,9 @@ class GPTLanguageModel(nn.Module):
             #   The ignore_index is a special token that should be ignored
             #   ([Pad] token in our case)
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1), ignore_index=self.pad_token
+                input=logits,
+                target=targets,
+                ignore_index=self.pad_token
             )
 
         return logits, loss
@@ -234,20 +313,20 @@ class GPTConfig():
 
     def __init__(
         self,
-        device,
-        tokenizer,
-        batch_size=64,
-        block_size=256,
-        max_iters=5000,
-        eval_interval=500,
-        learning_rate=3e-4,
-        eval_iters=200,
-        n_embd=384,
-        n_head=4,
-        n_layer=4,
-        dropout=0.2,
-        pad_token=0,
-    ):
+        device: torch.device,
+        tokenizer: 'ChessTokenizer',
+        batch_size: int = 64,
+        block_size: int = 256,
+        max_iters: int = 5000,
+        eval_interval: int = 500,
+        learning_rate: float = 3e-4,
+        eval_iters: int = 200,
+        n_embd: int = 384,
+        n_head: int = 4,
+        n_layer: int = 4,
+        dropout: float = 0.2,
+        pad_token: int = 0,
+    ) -> None:
         '''
         Setup the hyperparameters for the model
 

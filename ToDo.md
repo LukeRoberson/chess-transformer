@@ -20,6 +20,10 @@
 * Move the estimate_loss() function to the GPT model class
 * Move the training loop into the GPT model class
 
+## Generation
+* Put move numbers back in when generating
+* Stop generating when we reach an end token
+
 ## Dataset
 * Add an optional max game size option
 * Move the get_batch() function to the DataSet class

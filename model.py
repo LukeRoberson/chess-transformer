@@ -22,17 +22,17 @@ vocab_size = len(tokenizer)
 config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=32,
+    batch_size=16,
     block_size=384,
     max_iters=500,
     eval_interval=250,
     learning_rate=3e-4,
-    eval_iters=200,
+    eval_iters=50,
     n_embd=256,
     n_head=2,
     n_layer=2,
     dropout=0.2,
-    pad_token=tokenizer.pad_token,
+    pad_token=tokenizer.pad_number,
 )
 print(f'using device: {config.device}')
 
