@@ -108,6 +108,23 @@ class Block(nn.Module):
 
 
 class GPTLanguageModel(nn.Module):
+    '''
+    The GPT model for language modeling
+    Builds a transformer using other classes as building blocks
+    The GPTConfig class is used to track hyperparameters and GPT architecture
+
+    Methods:
+        __init__:
+            Initializes the GPT model
+        _init_weights:
+            Xavier/Glorot initialization of the weights
+        forward:
+            The forward pass of the model
+            Training or inference
+        generate:
+            Generate new tokens from the model
+    '''
+
     def __init__(
         self,
         config: 'GPTConfig',
@@ -176,13 +193,21 @@ class GPTLanguageModel(nn.Module):
         # Initialize the weights of the model
         self.apply(self._init_weights)
 
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
-            if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+    def _init_weights(
+        self,
+        module: nn.Module
+    ) -> None:
+        '''
+        Xavier/Glorot initialization of the weights
+            A non-zero value helps training
+
+        If there is no bias values on the linear layer, set to zero
+            Embedding layers do not have bias values
+        '''
+
+        torch.nn.init.xavier_normal_(module.weight)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            torch.nn.init.zeros_(module.bias)
 
     def forward(
         self,
@@ -286,21 +311,58 @@ class GPTLanguageModel(nn.Module):
 
         return logits, loss
 
-    def generate(self, idx, max_new_tokens):
-        # idx is (B, T) array of indices in the current context
+    def generate(
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int
+    ) -> torch.Tensor:
+        '''
+        Generate new tokens from the model
+        Accepts an initial sequence of tokens and generates new tokens
+
+        Loop through the number of tokens to generate
+            Use an existing sequence of tokens to predict the next token
+            We have a context window to adhere to; This is the block size
+            Select the last entry in the sequence (the prediction)
+            Convert logits to probabilities
+            Select a token from the list, based on probabilities
+                Not always the highest in the probability distribution
+
+        Args:
+            idx: torch.Tensor
+                The initial sequence of tokens
+                Shape: (B, T)
+            max_new_tokens: int
+                The number of tokens to generate
+
+        Returns:
+            torch.Tensor
+                The sequence of tokens
+                Shape: (B, T + max_new_tokens)
+        '''
+
+        # Loop through the number of tokens to generate
         for _ in range(max_new_tokens):
-            # crop idx to the last block_size tokens
+            # Just get the last 'block_size' tokens (context window)
             idx_cond = idx[:, -self.block_size:]
-            # get the predictions
-            logits, loss = self(idx_cond)
-            # focus only on the last time step
-            logits = logits[:, -1, :]  # becomes (B, C)
-            # apply softmax to get probabilities
-            probs = F.softmax(logits, dim=-1)  # (B, C)
-            # sample from the distribution
-            idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            # append sampled index to the running sequence
-            idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
+
+            # Get predictions with the forward pass (inferencing); B, T, C
+            logits, _ = self(idx_cond)
+
+            # Select just the B and C dimensions for the last entry
+            #   The last token is the one we want to predict
+            logits = logits[:, -1, :]
+
+            # Convert logits to probabilities
+            probs = F.softmax(logits, dim=-1)
+
+            # Select a token from the list, based on probabilities; Shape: B, 1
+            idx_next = torch.multinomial(probs, num_samples=1)
+
+            # Update the sequence of tokens with the new token and repeat
+            idx = torch.cat((idx, idx_next), dim=1)
+
+        # Finally, return the sequence of tokens
         return idx
 
 
