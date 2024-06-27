@@ -42,7 +42,9 @@ class ChessTokenizer:
         pgn_extract: Parse the JSON files
     '''
 
-    def __init__(self):
+    def __init__(
+        self
+    ) -> None:
         '''
         The train_prep flag is used to check if the mappings have been started
             This allows training to resume
@@ -60,7 +62,9 @@ class ChessTokenizer:
         self.pad = "[Pad]"
         self.pad_number = 2
 
-    def __len__(self) -> int:
+    def __len__(
+        self
+    ) -> int:
         '''
         Returns the size of the vocabulary, i.e., the number of unique tokens.
         This allows us to call len(tokenizer) to get
@@ -76,7 +80,7 @@ class ChessTokenizer:
         self,
         file_list: List[str],
         save_path: str = '.',
-    ):
+    ) -> None:
         '''
         Main training function
 
@@ -108,7 +112,7 @@ class ChessTokenizer:
         # Train the tokenizer
         trained_files = []
         for file in tqdm(file_list, desc="Total Progress", colour="green"):
-            moves = self.pgn_extract(file)
+            moves = self._pgn_extract(file)
             for idx, _ in enumerate(
                 tqdm(
                     moves,
@@ -118,13 +122,13 @@ class ChessTokenizer:
                 )
             ):
                 # Learn the tokens
-                self.learn_tokens(moves[idx].split(" "))
+                self._learn_tokens(moves[idx].split(" "))
 
             # Keep track of the files trained, enabling resuming
             trained_files.append(file.split("\\")[-1])
             if len(trained_files) == CHECKPOINT:
                 self.save_resume(save_path, trained_files)
-                self.json_save(
+                self._save(
                     self.word2idx,
                     self.idx2word,
                     save_path,
@@ -132,9 +136,12 @@ class ChessTokenizer:
                 trained_files = []
 
         # Save the mappings to JSON files
-        self.json_save(self.word2idx, self.idx2word, save_path)
+        self._save(self.word2idx, self.idx2word, save_path)
 
-    def learn_tokens(self, moves: List[str]):
+    def _learn_tokens(
+        self,
+        moves: List[str]
+    ) -> None:
         '''
         Learn the tokens from the input text
         This is a separate method to allow parallelism
@@ -164,12 +171,12 @@ class ChessTokenizer:
         # Create the reverse mapping (int: str)
         self.idx2word = {v: k for k, v in self.word2idx.items()}
 
-    def json_save(
+    def _save(
         self,
         word2idx: dict,
         idx2word: dict,
         save_path: str = '.',
-    ):
+    ) -> None:
         '''
         Save the mappings to JSON files
         If the files already exist, they will be overwritten
@@ -191,7 +198,9 @@ class ChessTokenizer:
         with open(idx2word_path, "w") as f:
             json.dump(idx2word, f)
 
-    def load(self):
+    def load(
+        self
+    ) -> None:
         '''
         Load the mappings from JSON files
         JSON files use strings, so the keys need to be converted to integers
@@ -210,7 +219,11 @@ class ChessTokenizer:
         # Set the train_prep flag
         self.train_prep = True
 
-    def save_resume(self, path: str, files: List[str]):
+    def save_resume(
+        self,
+        path: str,
+        files: List[str]
+    ) -> None:
         '''
         Save the current state of the tokenizer to a resume file
 
@@ -266,7 +279,10 @@ class ChessTokenizer:
 
         return token_ids
 
-    def detokenize(self, token_ids: List[int]) -> str:
+    def detokenize(
+        self,
+        token_ids: List[int]
+    ) -> str:
         '''
         Converts a list of integers (tokens) into a string
 
@@ -303,7 +319,10 @@ class ChessTokenizer:
 
         return text
 
-    def pgn_extract(self, file_path: str):
+    def _pgn_extract(
+        self,
+        file_path: str
+    ) -> List[str]:
         '''
         Parse the JSON files
         This creates a list of moves without the metadata or move number
@@ -333,7 +352,9 @@ class ChessTokenizer:
         return game_list
 
 
-def confirm_mappings(tokenizer):
+def confirm_mappings(
+    tokenizer: ChessTokenizer
+) -> bool:
     '''
     A simple function for debugging
     This confirms that the forward and reverse mappings align correctly
