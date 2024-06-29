@@ -11,6 +11,8 @@ import json
 import re
 from tqdm import tqdm
 import os
+import random
+
 import cProfile
 import pstats
 import time
@@ -46,14 +48,9 @@ class ChessTokenizer:
         self
     ) -> None:
         '''
-        The train_prep flag is used to check if the mappings have been started
-            This allows training to resume
         next_value is used to track the next item in the dict during training
             This is an optimization as training can take a very long time
         '''
-
-        # Set the train_prep flag
-        self.train_prep = False
 
         # A counter to track the next item in the dictionary
         self.next_value = 1
@@ -78,8 +75,11 @@ class ChessTokenizer:
 
     def train(
         self,
-        file_list: List[str],
+        dataset_path: str = './dataset',
         save_path: str = '.',
+        resume_file: str = f"{os.getcwd()}/resume.txt",
+        resume: bool = False,
+        percent: int = 100
     ) -> None:
         '''
         Main training function
@@ -87,16 +87,43 @@ class ChessTokenizer:
         Creates a mapping between words and indices
         Creates a mapping between indices and words
         Save the mappings to JSON files
+        Manages resuming training if needed
+        Can train on a subset of the files if needed for testing
 
         Args:
-            file_list: List of files containing chess moves
-                In standard chess notation, space separated
+            dataset_path: Path to the dataset
             save_path: Path to save the JSON files
+            resume_file: Path to the resume file
+            resume: Flag to resume training
+            percent: Percentage of files to use for training
         '''
+
+        # Get a list of all training files
+        full_file_list = os.listdir(dataset_path)
+
+        # Check if we can resume training
+        if resume and os.path.exists(resume_file):
+            self.load()
+
+            # Read the resume file
+            with open(os.path.join(resume_file), "r") as f:
+                resume_list = [line.strip() for line in f]
+
+            # Remove files from full_file_list if they exist in 'resume'
+            full_file_list = [
+                file
+                for file in full_file_list
+                if file not in resume_list
+            ]
+            if len(full_file_list) == 0:
+                print("No files to train on. Exiting.")
+                return
+
+            trained_files = []
 
         # Create dictionaries, and add special tokens
         #   This is only done once, so we check the flag
-        if self.train_prep is False:
+        else:
             self.word2idx = {
                 "[Start]": 0,
                 "[End]": 1,
@@ -104,14 +131,36 @@ class ChessTokenizer:
                 "[Unk]": 3,
                 "[Mask]": 4,
             }
-            self.train_prep = True
+            trained_files = []
+            with open(resume_file, "w") as f:
+                f.write("")
 
         # Track the next value for the dictionary
         self.next_value = max(self.word2idx.values()) + 1
 
+        # Select the files to use for training
+        random.shuffle(full_file_list)
+        file_list = full_file_list[:int(len(full_file_list) * (percent / 100))]
+        print(
+            f"Using {len(file_list)} out of {len(full_file_list)} files\
+            for tokenizer training."
+        )
+
+        # Create the file list
+        file_list = [
+            os.path.join(dataset_path, file)
+            for file in file_list
+            if os.path.isfile(os.path.join(dataset_path, file))
+        ]
+
         # Train the tokenizer
-        trained_files = []
-        for file in tqdm(file_list, desc="Total Progress", colour="green"):
+        for index, file in enumerate(
+            tqdm(
+                file_list,
+                desc="Total Progress",
+                colour="green"
+            )
+        ):
             moves = self._pgn_extract(file)
             for idx, _ in enumerate(
                 tqdm(
@@ -126,8 +175,14 @@ class ChessTokenizer:
 
             # Keep track of the files trained, enabling resuming
             trained_files.append(file.split("\\")[-1])
-            if len(trained_files) == CHECKPOINT:
-                self.save_resume(save_path, trained_files)
+            if (
+                (len(trained_files) == CHECKPOINT) or
+                (index == len(file_list) - 1)
+            ):
+                self._save_resume(
+                    resume_file,
+                    trained_files
+                )
                 self._save(
                     self.word2idx,
                     self.idx2word,
@@ -136,7 +191,11 @@ class ChessTokenizer:
                 trained_files = []
 
         # Save the mappings to JSON files
-        self._save(self.word2idx, self.idx2word, save_path)
+        self._save(
+            self.word2idx,
+            self.idx2word,
+            save_path
+        )
 
     def _learn_tokens(
         self,
@@ -216,10 +275,7 @@ class ChessTokenizer:
         # Convert string keys to integer
         self.idx2word = {int(k): v for k, v in self.idx2word.items()}
 
-        # Set the train_prep flag
-        self.train_prep = True
-
-    def save_resume(
+    def _save_resume(
         self,
         path: str,
         files: List[str]
@@ -232,7 +288,7 @@ class ChessTokenizer:
         '''
 
         # Just open the resume file and append the files
-        with open(f"{path}\\resume.txt", "a") as f:
+        with open(path, "a") as f:
             for file in files:
                 f.write(f"{file}\n")
 
@@ -385,17 +441,11 @@ def main():
     # Create the tokenizer
     tokenizer = ChessTokenizer()
 
-    # Get a list of files to train with
-    dataset_dir = "./dataset"
-    file_list = os.listdir(dataset_dir)
-    file_list = [
-        os.path.join(dataset_dir, file)
-        for file in file_list
-        if os.path.isfile(os.path.join(dataset_dir, file))
-    ]
-
     # Train the tokenizer
-    tokenizer.train(file_list)
+    tokenizer.train(
+        resume=True,
+        percent=20
+    )
 
     # Check the mappings
     confirm_mappings(tokenizer)

@@ -71,6 +71,8 @@ While training, a 'resume.txt' file is created. This is a list of all files that
 
 If training is interrupted (which can easily happen over the course of 80,000 files in the dataset), you can use the resume.txt file to skip files in the dataset that have already been used in the training process.
 
+Pass 'resume=True' to the training function to resume training.
+
 ### Saving and Loading
 
 The json_save() method can be used to save a tokenizer to the two JSON files. This is implicitly called during training, and usually wouldn't need to be called manually.

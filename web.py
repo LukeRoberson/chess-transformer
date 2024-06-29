@@ -26,7 +26,7 @@ def update(name):
 
 def dir_selector(dir):
     '''
-    Presents a dialog box to select the dataset folder
+    Presents a dialog box to select a directory
 
     Parameters:
         dir (str): The default directory to open the dialog box
@@ -43,6 +43,29 @@ def dir_selector(dir):
     root = tk.Tk()
     root.withdraw()
     folder_selected = filedialog.askdirectory(initialdir=dir)
+
+    return folder_selected
+
+
+def file_selector(dir):
+    '''
+    Presents a dialog box to select a file
+
+    Parameters:
+        dir (str): The default directory to open the dialog box
+
+    Returns:
+        str: The path to the selected file
+    '''
+
+    # If no directory is provided, use the current working directory
+    if dir is None or dir == "":
+        dir = f"{os.getcwd()}\\dataset"
+
+    # Use tkinter to open a dialog box
+    root = tk.Tk()
+    root.withdraw()
+    folder_selected = filedialog.askopenfile(initialdir=dir)
 
     return folder_selected
 
@@ -68,50 +91,12 @@ def train_tokenizer(
     # Create the tokenizer
     tokenizer = ChessTokenizer()
 
-    # Get a list of all training files
-    full_file_list = os.listdir(path)
-    full_size = len(full_file_list)
-
-    # Check if we can resume training
-    if resume and os.path.exists(os.path.join(save_path, "resume.txt")):
-        tokenizer.load()
-
-        # Read the resume file
-        with open(os.path.join(save_path, "resume.txt"), "r") as f:
-            resume = [line.strip() for line in f]
-
-        # Remove files from full_file_list if they exist in 'resume'
-        print(f"full:{full_file_list}")
-        print(f"resume: {resume}")
-        full_file_list = [
-            file
-            for file in full_file_list
-            if file not in resume
-        ]
-
-    else:
-        resume = False
-
-    # Select the files to use for training
-    random.shuffle(full_file_list)
-    file_list = full_file_list[:int(len(full_file_list) * (percentage / 100))]
-
-    print(
-        f"Using {len(file_list)} out of {full_size} files\
-        for tokenizer training."
-    )
-
-    # Create the file list
-    file_list = [
-        os.path.join(path, file)
-        for file in file_list
-        if os.path.isfile(os.path.join(path, file))
-    ]
-
     # Train the tokenizer
     tokenizer.train(
-        file_list=file_list,
-        save_path=save_path,
+        dataset_path=path,
+        resume_file=save_path,
+        resume=resume,
+        percent=percentage,
     )
 
 
@@ -125,59 +110,103 @@ Within each block, we define groups for each section
 with gr.Blocks() as token_tab:
     # Dataset group
     with gr.Group():
-        txt_token_dataset = gr.Textbox(
-            label="Path to the dataset",
-            value=f"{os.getcwd()}\\dataset",
-            info="Select the path to the dataset folder"
-        )
-        btn_token_dataset = gr.Button(
-            value="Select Dataset",
-        )
-        sld_token_dataset = gr.Slider(
-            label="Number of files",
-            minimum=1,
-            maximum=100,
-            step=1,
-            value=100,
-            info="Percentage of files to use for training \
-                Files are chosen randomly from the selected directory."
-        )
-        btn_token_dataset.click(
-            fn=dir_selector,
-            inputs=txt_token_dataset,
-            outputs=txt_token_dataset,
-        )
+        with gr.Row():
+            with gr.Column(scale=3):
+                txt_token_dataset = gr.Textbox(
+                    label="Path to the dataset",
+                    value=f"{os.getcwd()}\\dataset",
+                    info="Select the path to the dataset folder"
+                )
+
+            with gr.Column(variant='compact', scale=1):
+                btn_token_dataset = gr.Button(
+                    value="Select Dataset",
+                    scale=1,
+                )
+                btn_token_dataset.click(
+                    fn=dir_selector,
+                    inputs=txt_token_dataset,
+                    outputs=txt_token_dataset,
+                )
+
+        with gr.Row():
+            sld_token_dataset = gr.Slider(
+                label="Number of files",
+                minimum=1,
+                maximum=100,
+                step=1,
+                value=100,
+                info="Percentage of files to use for training \
+                    Files are chosen randomly from the selected directory."
+            )
 
     # Training Group
     with gr.Group():
-        txt_token_save = gr.Textbox(
-            label="Save location",
-            value=f"{os.getcwd()}",
-            info="Select the path to save the tokenizer. \
-                This is where two files, word2idx.json and idx2word.json, \
-                will be saved."
-        )
-        btn_token_save = gr.Button(
-            value="Select save location",
-        )
-        chk_token_resume = gr.Checkbox(
-            label="Resume training",
-            value=False,
-            info="If checked, training will resume from the selected \
-                save location, if a resume file is found. \
-                If unchecked, or if there is no resume file, \
-                the tokenizer will be trained from scratch."
-        )
-        btn_token_save.click(
-            fn=dir_selector,
-            inputs=txt_token_save,
-            outputs=txt_token_save,
-        )
+        # Save location
+        with gr.Row():
+            with gr.Column(scale=3):
+                txt_token_save = gr.Textbox(
+                    label="File location",
+                    value=f"{os.getcwd()}",
+                    info="Select the path for the tokenizer files. \
+                        This is where two files, word2idx.json and \
+                        idx2word.json, will be saved, or loaded from \
+                        if resuming training."
+                )
+
+            with gr.Column(scale=1, variant='panel'):
+                btn_token_save = gr.Button(
+                    value="Select save location",
+                    scale=1,
+
+                )
+                btn_token_save.click(
+                    fn=dir_selector,
+                    inputs=txt_token_save,
+                    outputs=txt_token_save,
+                )
+
+    # Resume options
+    with gr.Group():
+        with gr.Row():
+            chk_token_resume = gr.Checkbox(
+                label="Resume training",
+                value=False,
+                info="If checked, training will resume from the selected \
+                    save location, if a resume file is found. \
+                    If unchecked, or if there is no resume file, \
+                    the tokenizer will be trained from scratch."
+            )
+
+        # Resume location
+        with gr.Row():
+            with gr.Column(scale=3):
+                txt_resume = gr.Textbox(
+                    label="Resume file",
+                    info="Select the path to the resume file, typically \
+                    resume.txt. This is created during training, so training \
+                    can resume later. If the 'Resume Training' box is \
+                    checked, this file will be used to determine which files \
+                    have already been trained on.",
+                    value=f"{os.getcwd()}\\resume.txt",
+                )
+
+            with gr.Column(scale=1, variant='compact'):
+                btn_resume = gr.Button(
+                    value="Select resume file",
+                    scale=1,
+                )
+                btn_resume.click(
+                    fn=dir_selector,
+                    inputs=txt_resume,
+                    outputs=txt_resume,
+                )
 
     # Start Training
     with gr.Group():
         btn_token_start = gr.Button(
-            value="Start Training"
+            value="Start Training",
+            variant='primary',
         )
         txt_token_train = gr.Textbox(
             label="Training Progress",
@@ -216,7 +245,8 @@ with gr.Blocks() as gen_tab:
 # The main interface, with the tabs
 front_end = gr.TabbedInterface(
     [token_tab, train_tab, gen_tab],
-    ["Tokenizer", "Trainer", "Generator"]
+    ["Tokenizer", "Trainer", "Generator"],
+    title="Transformer Interface",
 )
 
 
