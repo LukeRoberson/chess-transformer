@@ -18,6 +18,7 @@
 * Hyperparameters for training
 * Maybe add profiles for common architectures
 * Open folder and open file windows to open on top
+* Add a training progress tqdm to the tokenizer
 
 ## Transformer
 * Add padding to datasets so they are the same length

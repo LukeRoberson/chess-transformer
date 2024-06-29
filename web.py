@@ -16,7 +16,6 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 from tokenizer import ChessTokenizer
-import random
 
 
 # A stub function for tabs that aren't in use yet
@@ -74,7 +73,8 @@ def train_tokenizer(
     path,
     save_path,
     percentage=100,
-    resume=False
+    resume=False,
+    resume_file=None
 ):
     '''
     Trains the tokenizer on the dataset
@@ -94,9 +94,10 @@ def train_tokenizer(
     # Train the tokenizer
     tokenizer.train(
         dataset_path=path,
-        resume_file=save_path,
+        save_path=save_path,
         resume=resume,
         percent=percentage,
+        resume_file=resume_file
     )
 
 
@@ -218,6 +219,7 @@ with gr.Blocks() as token_tab:
                 txt_token_save,
                 sld_token_dataset,
                 chk_token_resume,
+                txt_resume,
             ]
         )
 
