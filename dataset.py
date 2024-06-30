@@ -2,7 +2,6 @@
 The class for managing the dataset
 '''
 
-
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
@@ -12,6 +11,8 @@ import os
 import re
 import json
 from tqdm import tqdm
+
+from typing import Tuple
 
 
 class DataSet():
@@ -27,13 +28,16 @@ class DataSet():
 
         create_dataloaders:
             Create dataloaders for the training and testing sets
+
+        get_batch:
+            Get a batch of data from the training or testing set
     '''
 
     def __init__(
         self,
         config: GPTConfig,
         dataset_dir: str = './dataset'
-    ):
+    ) -> None:
         '''
         Constructor
 
@@ -58,7 +62,9 @@ class DataSet():
         self.train_dataloader = None
         self.test_dataloader = None
 
-    def load(self):
+    def load(
+        self
+    ) -> None:
         '''
         Load the dataset from JSON files
 
@@ -121,7 +127,7 @@ class DataSet():
     def split(
         self,
         test_size: float = 0.2,
-    ):
+    ) -> None:
         '''
         Split the dataset into training and testing sets
 
@@ -159,7 +165,7 @@ class DataSet():
     def create_dataloaders(
         self,
         shuffle: bool = True
-    ):
+    ) -> None:
         '''
         Create dataloaders for the training and testing sets
 
@@ -193,3 +199,37 @@ class DataSet():
             batch_size=self.config.batch_size,
             shuffle=False
         )
+
+    def get_batch(
+        self,
+        split: str = 'train'
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        '''
+        Get a batch of data from the training or testing set
+        This returns a batch of input and target tensors
+            They are automatically moved to the right device
+
+        Args:
+            split: str
+                The split to get the batch from
+                Either 'train' or 'test'
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]
+                The input and target tensors
+        '''
+
+        # Get the correct dataloader (test or train)
+        data_loader = (
+            self.train_dataloader
+            if split == 'train'
+            else self.test_dataloader
+        )
+
+        # Get the input and target tensors, and move to the right device
+        for input, target in data_loader:
+            input = input.to(self.config.device)
+            target = target.to(self.config.device)
+
+        # Return the input and target tensors (a batch of data)
+        return input, target

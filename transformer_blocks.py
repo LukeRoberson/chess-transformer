@@ -434,6 +434,7 @@ class GPTLanguageModel(nn.Module):
         self.device = config.device
         self.block_size = config.block_size
         self.pad_token = config.pad_token
+        self.eval_iters = config.eval_iters
 
         # Embedding layer for tokens; Essentially a 2D tensor
         #   A trainable matrix where each row represents a token
@@ -465,6 +466,13 @@ class GPTLanguageModel(nn.Module):
 
         # Initialize the weights of the model
         self.apply(self._init_weights)
+
+        # Get the parameter count of the model
+        self.param_count = sum(
+            # numel() is a PyTorch way to count elements in a tensor
+            p.numel()
+            for p in self.parameters()
+        )
 
     def _init_weights(
         self,
@@ -498,6 +506,53 @@ class GPTLanguageModel(nn.Module):
         # of nn.Linear and has a bias
         if isinstance(module, nn.Linear) and module.bias is not None:
             torch.nn.init.zeros_(module.bias)
+
+    @torch.no_grad()
+    def estimate_loss(
+        self,
+        dataset
+    ) -> dict:
+        '''
+        Estimate the loss of the model
+        Note, training is disabled during this process using
+            no_grad() and eval()
+
+        Args:
+            dataset: DataSet
+                The dataset to evaluate the model on
+
+        Returns:
+            dict
+                A dictionary of the loss on the training and validation sets
+        '''
+
+        # Dictionary to store the average losses
+        average_losses_train = {}
+
+        # Disable training
+        self.eval()
+
+        for split in ['train', 'val']:
+            # Initialize the losses tensor to all zeros
+            losses = torch.zeros(self.eval_iters)
+
+            # Loop through the evaluation iterations
+            for batch_index in range(self.eval_iters):
+                # Get a batch of data
+                X, Y = dataset.get_batch(split)
+
+                # Run the forward pass and get the loss
+                _, loss = self(X, Y)
+
+                # Store the loss in the tensor
+                losses[batch_index] = loss.item()
+
+            average_losses_train[split] = losses.mean()
+
+        # Enable training again
+        self.train()
+
+        return average_losses_train
 
     def forward(
         self,
@@ -603,7 +658,7 @@ class GPTLanguageModel(nn.Module):
 
     def generate(
         self,
-        idx: torch.Tensor,
+        context: torch.Tensor,
         max_new_tokens: int
     ) -> torch.Tensor:
         '''
@@ -620,8 +675,8 @@ class GPTLanguageModel(nn.Module):
 
         Args:
             idx: torch.Tensor
-                The initial sequence of tokens
-                Shape: (B, T)
+                The initial sequence of tokens; Shape: (B, T)
+                Pass 'None' to generate a sequence from scratch
             max_new_tokens: int
                 The number of tokens to generate
 
@@ -631,10 +686,18 @@ class GPTLanguageModel(nn.Module):
                 Shape: (B, T + max_new_tokens)
         '''
 
+        # Create a blank context if none is provided
+        if context is None:
+            context = torch.zeros(
+                (1, 1),
+                dtype=torch.long,
+                device=self.device
+            )
+
         # Loop through the number of tokens to generate
         for _ in range(max_new_tokens):
             # Just get the last 'block_size' tokens (context window)
-            idx_cond = idx[:, -self.block_size:]
+            idx_cond = context[:, -self.block_size:]
 
             # Get predictions with the forward pass (inferencing); B, T, C
             logits, _ = self(idx_cond)
@@ -650,10 +713,10 @@ class GPTLanguageModel(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
 
             # Update the sequence of tokens with the new token and repeat
-            idx = torch.cat((idx, idx_next), dim=1)
+            context = torch.cat((context, idx_next), dim=1)
 
         # Finally, return the sequence of tokens
-        return idx
+        return context
 
 
 class GPTConfig():
@@ -678,6 +741,7 @@ class GPTConfig():
         n_layer: int = 4,
         dropout: float = 0.2,
         pad_token: int = 0,
+        test_split: float = 0.2
     ) -> None:
         '''
         Setup the hyperparameters for the model
@@ -726,23 +790,37 @@ class GPTConfig():
             pad_token: int
                 The token for padding
                 This is the token number used for padding sequences
+
+            test_split: float
+                The size of the training set
+                The rest is used for validation
         '''
 
+        # Hardware
         self.device = device
-        self.tokenizer = tokenizer
 
+        # Tokenizer
+        self.tokenizer = tokenizer
+        self.pad_token = pad_token
+
+        # Architecture
         self.batch_size = batch_size
         self.block_size = block_size
-        self.max_iters = max_iters
-        self.eval_interval = eval_interval
-        self.learning_rate = learning_rate
-        self.eval_iters = eval_iters
         self.n_embd = n_embd
         self.n_head = n_head
         self.n_layer = n_layer
-        self.dropout = dropout
 
-        self.pad_token = pad_token
+        # Evaluation
+        self.max_iters = max_iters
+        self.eval_interval = eval_interval
+
+        # Training
+        self.learning_rate = learning_rate
+        self.eval_iters = eval_iters
+        self.test_split = test_split
+
+        # Regularization
+        self.dropout = dropout
 
 
 if __name__ == '__main__':

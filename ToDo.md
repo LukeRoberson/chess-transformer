@@ -7,8 +7,6 @@
 * Add a training progress tqdm to the tokenizer
 
 ## Transformer
-* Add padding to datasets so they are the same length
-* Add Ctrl-C handling
 * Move the estimate_loss() function to the GPT model class
 * Move the training loop into the GPT model class
 * Add a scheduler
@@ -21,8 +19,8 @@
 
 ## Dataset
 * Add an optional max game size option
-* Move the get_batch() function to the DataSet class
 
 # Testing
 * See if a different activation function in the FFN has an effect
 * See if adding biases in the attention heads makes a difference
+* Can we dynamically adjust batch size based on consumed VRAM?
