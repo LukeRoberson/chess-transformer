@@ -12,46 +12,171 @@ from typing import Optional, Tuple
 
 
 class Head(nn.Module):
-    """ one head of self-attention """
+    '''
+    A single head of self-attention
+    Mutiple heads will be created in parallel to learn different relationships
+        between tokens
 
-    def __init__(self, config, head_size):
+    Methods:
+        __init__:
+            Constructor method for the Head class
+            This defines the layers and structures used in the head
+        forward:
+            The forward pass of the head
+    '''
+
+    def __init__(
+        self,
+        config: 'GPTConfig',
+        head_size: int
+    ) -> None:
+        '''
+        Constructor method for the Head class
+            This defines the layers and structures used in the head
+
+        Create the key, query, and value linear layers
+            These are projections that create the Q, K, V matrices
+            from the input embeddings
+        Creates a buffer for the look-ahead mask
+            A buffer is a tensor that stores some of the model's state
+            The 'tril' tensor is a lower triangular matrix of ones
+            This masks out the future tokens in the sequence
+            This is the key difference between decoder and encoder
+                self-attention
+        Create a dropout layer for regularization
+
+        Args:
+            config: GPTConfig
+                The hyperparameters for the model
+            head_size: int
+                The size of the heads (always a whole number)
+                This is the embedding size divided by the number of heads
+        '''
+
         super().__init__()
+
+        # Create the key, query, and value linear layers
         self.key = nn.Linear(config.n_embd, head_size, bias=False)
         self.query = nn.Linear(config.n_embd, head_size, bias=False)
         self.value = nn.Linear(config.n_embd, head_size, bias=False)
+
+        # Create the look-ahead mask
         self.register_buffer(
             'tril',
             torch.tril(torch.ones(config.block_size, config.block_size))
         )
 
+        # Regularization
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x):
-        # input of size (batch, time-step, channels)
-        # output of size (batch, time-step, head size)
-        B, T, C = x.shape
-        k = self.key(x)   # (B,T,hs)
-        q = self.query(x)  # (B,T,hs)
+    def forward(
+        self,
+        input_tensor: torch.Tensor
+    ) -> torch.Tensor:
+        '''
+        The forward pass of the head
 
-        # compute attention scores ("affinities")
-        #   (B, T, hs) @ (B, hs, T) -> (B, T, T)
-        wei = q @ k.transpose(-2, -1) * k.shape[-1] ** -0.5
-        # (B, T, T)
-        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
-        wei = F.softmax(wei, dim=-1)  # (B, T, T)
-        wei = self.dropout(wei)
+        (1) Create the Query, Key, and Value matrices
+        (2) Compute attention scores, also known as "affinities"
+            Matrix multiplication of Q and K
+                The last two dimensions (-2, -1) of K are transposed
+                K changes from (B, T, hs) to (B, hs, T)
+                The transpose is necessary for the matrix multiplication
+            Attention scores are scaled by the square root of the key dimension
+                This is needed to prevent exploding or vanishing gradients
+        (3) Apply a look-ahead mask to the attention scores
+            This is so the transformer cannot 'see' future tokens
+            We have self.tril, which is a precomputed lower triangular matrix
+            This process slices the matrix to get the right size for the tensor
+            This creates a tensor where future positions are masked out
+        (4) Apply softmax to the attention scores
+            This is to create a probability distribution
+            This represents the weight of attention that a token should
+                give to other tokens
+        (5) Regularization using dropout
+        (6) Get the weighted attention
+            This is the weighted sum of the values
+            Found by matrix multiplication of the probability distribution
+                with the value matrix
+            Resulting shape is (B, T, hs)
 
-        # perform the weighted aggregation of the values
-        v = self.value(x)  # (B,T,hs)
-        out = wei @ v  # (B, T, T) @ (B, T, hs) -> (B, T, hs)
-        return out
+        Args:
+            input_tensor: torch.Tensor
+            (B, T, C)
+
+        Returns:
+            torch.Tensor
+            (B, T, head_size)
+        '''
+
+        # Create the Query and Key matrices; Shape: (B, T, hs)
+        q = self.query(input_tensor)
+        k = self.key(input_tensor)
+        v = self.value(input_tensor)
+
+        # Compute attention scores
+        attention = q @ k.transpose(-2, -1)
+        scaled_attention = attention * k.shape[-1] ** 0.5
+
+        # Look-ahead mask (output shape is B, T, T)
+        _, T, _ = input_tensor.shape
+        masked_attention = scaled_attention.masked_fill(
+            self.tril[:T, :T] == 0,
+            float('-inf')
+        )
+
+        # Get the probability distribution (still B, T, T)
+        probability_distribution = F.softmax(masked_attention, dim=-1)
+
+        # Regularization
+        probability_distribution = self.dropout(probability_distribution)
+
+        # Get the final weighted attention (B, T, hs)
+        weighted_attention = probability_distribution @ v
+
+        return weighted_attention
 
 
 class MultiHeadAttention(nn.Module):
-    """ multiple heads of self-attention in parallel """
+    '''
+    The multi-headed self-attention mechanism
+    Creates multiple heads of self-attention in parallel
 
-    def __init__(self, config, head_size):
+    The multiple heads can learn different relationships between tokens
+        It's like they all have a different perspective on the tokens
+        They each learn different relationships
+
+    Methods:
+        __init__:
+            Constructor method for the MultiHeadAttention class
+            Create multiple heads and a projection layer
+        forward:
+            The forward pass of the multi-headed self-attention mechanism
+    '''
+
+    def __init__(
+        self,
+        config: 'GPTConfig',
+        head_size: int
+    ) -> None:
+        '''
+        Constructor method for the MultiHeadAttention class
+
+        (1) Create multiple heads (modules) and store them in a list
+        (2) Create a projection layer to combine the heads
+        (3) A dropout layer for regularization
+
+        Args:
+            config: GPTConfig
+                The hyperparameters for the model
+            head_size: int
+                The size of the heads
+                This is the embedding size divided by the number of heads
+        '''
+
         super().__init__()
+
+        # Create multiple heads (modules) and store them in a list
         self.heads = nn.ModuleList(
             [
                 Head(
@@ -61,49 +186,197 @@ class MultiHeadAttention(nn.Module):
                 for _ in range(config.n_head)
             ]
         )
-        self.proj = nn.Linear(head_size * config.n_head, config.n_embd)
-        self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x):
-        out = torch.cat([h(x) for h in self.heads], dim=-1)
-        out = self.dropout(self.proj(out))
-        return out
+        # Combines the results of the heads, and projects them back to
+        #   the original tensor size
+        self.proj = nn.Linear(
+            head_size * config.n_head,
+            config.n_embd
+        )
+
+        # A dropout layer for regularization
+        self.dropout = nn.Dropout(
+            config.dropout
+        )
+
+    def forward(
+        self,
+        input_sequence: torch.Tensor
+    ) -> torch.Tensor:
+        '''
+        The forward pass of the multi-headed self-attention mechanism
+
+        (1) Pass the input sequence through each of the heads
+        (2) Concatenate the results of the heads
+        (3) Project the concatenated tensor back to the original size
+
+        Args:
+            input_sequence: torch.Tensor
+                The input sequence (B, T, C)
+
+        Returns:
+            torch.Tensor
+                The projected output tensor (B, T, C)
+        '''
+
+        # Pass the input sequence through each of the heads
+        #   Results are concatenated along the last dimension (dim=-1)
+        #   The last dimension is the number of heads
+        concatenated_heads_output = torch.cat(
+            [attention_head(input_sequence) for attention_head in self.heads],
+            dim=-1
+        )
+
+        # Project the concatenated tensor back to the original size
+        #   Then apply dropout for regularization
+        projected_output = self.dropout(
+            self.proj(concatenated_heads_output)
+        )
+
+        return projected_output
 
 
 class FeedFoward(nn.Module):
-    """ a simple linear layer followed by a non-linearity """
+    '''
+    The feed-forward transformation in the decoder block
 
-    def __init__(self, config):
+    Expands the dimensionality of the embeddings
+        This allows for more complex relationships between tokens
+    Adds non-linearity to the model
+        Using an activation function (ReLU)
+    Reduces the dimensionality back to the original size
+    '''
+
+    def __init__(
+        self,
+        config: 'GPTConfig'
+    ) -> None:
+        '''
+        Constructor method for the FeedFoward class
+
+        Create a simple neural network with two linear layers
+            The first layer expands the dimensions
+            The second layer reduces the dimensions back to the original size
+        ReLU activation function is used for non-linearity
+        Dropout is used for regularization
+
+        Args:
+            config: GPTConfig
+                The hyperparameters for the model
+        '''
+
         super().__init__()
-        self.net = nn.Sequential(
+
+        # The feed-forward network
+        self.ffn = nn.Sequential(
+            # Layer 1: Expand the dimensions 4x
             nn.Linear(config.n_embd, 4 * config.n_embd),
+
+            # ReLU activation function
             nn.ReLU(),
+
+            # Layer 2: Reduce the dimensions back to the original size
             nn.Linear(4 * config.n_embd, config.n_embd),
+
+            # Dropout for regularization
             nn.Dropout(config.dropout),
         )
 
-    def forward(self, x):
-        return self.net(x)
+    def forward(
+        self,
+        input_tensor: torch.Tensor
+    ) -> torch.Tensor:
+        '''
+        The forward pass of the feed
+        Pass the input tensor through the feed-forward network
+
+        Args:
+            input_tensor: torch.Tensor
+                The input tensor (B, T, C)
+
+        Returns:
+            torch.Tensor
+                The output tensor (B, T, C)
+        '''
+
+        return self.ffn(input_tensor)
 
 
 class Block(nn.Module):
-    """ Transformer block: communication followed by computation """
+    '''
+    A complete decoder block
+    The model will use several of these as layers
 
-    def __init__(self, config):
-        # n_embd: embedding dimension, n_head: the number of heads we'd like
+    A decoder block consists of:
+        Masked multi-headed self-attention
+        Layer Normalization
+        Point-wise feed-forward transformation
+        Residual connections around each of the sub-layers
+
+    Methods:
+        __init__:
+            Constructor method for the Block class
+            Build the architecture of the block using sub-layers
+        forward:
+            The forward pass of the block
+    '''
+
+    def __init__(
+        self,
+        config: 'GPTConfig'
+    ) -> None:
+        '''
+        Constructor method for the Block class
+        Build the architecture of the block using sub-layers
+
+        The Heads build a deep understanding of the embeddings,
+            and how they relate to each other
+        The FFN is a simple neural network
+            It expands the dimensions, adds non-linearity, and reduces
+            the dimension back to the original size
+            Each embedding is processed independently
+        Layer normalization is is a standard PyTorch LayerNorm layer
+            It is used for stability, preventing exploding gradients
+
+        Args:
+            config: GPTConfig
+                The hyperparameters for the model
+        '''
+
         super().__init__()
-        head_size = config.n_embd // config.n_head
+
+        # Multi-headed self-attention layer
         self.sa = MultiHeadAttention(
-            config,
-            head_size,
+            config=config,
+            # Head size is the embedding size divided by the number of heads
+            head_size=config.n_embd // config.n_head,
         )
+
+        # The feed-forward layer
         self.ffwd = FeedFoward(config)
+
+        # Layer normalization
         self.ln1 = nn.LayerNorm(config.n_embd)
         self.ln2 = nn.LayerNorm(config.n_embd)
 
-    def forward(self, x):
+    def forward(
+        self,
+        x: torch.Tensor
+    ) -> torch.Tensor:
+        '''
+        The forward pass of the block
+        (1) Computes the self-attention
+            This applies normalization and residual connections
+        (2) Computes the feed-forward transformation
+            Also applies normalization and residual connections
+        '''
+
+        # Self attention, normalization, and residual connection
         x = x + self.sa(self.ln1(x))
+
+        # Feed-forward transformation, normalization, and residual connection
         x = x + self.ffwd(self.ln2(x))
+
         return x
 
 
@@ -198,14 +471,31 @@ class GPTLanguageModel(nn.Module):
         module: nn.Module
     ) -> None:
         '''
-        Xavier/Glorot initialization of the weights
+        Xavier/Glorot initialization of the weights for a module
             A non-zero value helps training
 
         If there is no bias values on the linear layer, set to zero
             Embedding layers do not have bias values
+
+        Note, this can't be used on every module
+            Some modules are the wrong size, and will retain default
+            Pytorch initialization values
+
+        Args:
+            module: nn.Module
+                The module to initialize the weights for
         '''
 
-        torch.nn.init.xavier_normal_(module.weight)
+        # Check if the module has 'weight' attribute and the weight
+        #   has at least 2 dimensions
+        if (
+            (hasattr(module, 'weight') and module.weight is not None) and
+            (module.weight.dim() >= 2)
+        ):
+            torch.nn.init.xavier_normal_(module.weight)
+
+        # Initialize bias to zero if the module is an instance
+        # of nn.Linear and has a bias
         if isinstance(module, nn.Linear) and module.bias is not None:
             torch.nn.init.zeros_(module.bias)
 
@@ -453,3 +743,8 @@ class GPTConfig():
         self.dropout = dropout
 
         self.pad_token = pad_token
+
+
+if __name__ == '__main__':
+    print('This is a module with classes for the transformer model')
+    print('Please run model.py for the full model')

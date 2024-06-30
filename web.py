@@ -226,12 +226,135 @@ with gr.Blocks() as token_tab:
 
 # The training tab - Stub area for now
 with gr.Blocks() as train_tab:
-    gr.Markdown("Start typing below and then click **Run** to see the output.")
-    with gr.Row():
-        inp = gr.Textbox(placeholder="What is your name?")
-        out = gr.Textbox()
-    btn = gr.Button("Run")
-    btn.click(fn=update, inputs=inp, outputs=out)
+    # Architecture group
+    gr.Markdown(
+        """
+        ## Model Architecture
+        """
+    )
+    with gr.Group():
+        with gr.Row():
+            sld_embedding_size = gr.Slider(
+                label="Embedding size",
+                minimum=1,
+                maximum=1024,
+                step=4,
+                value=384,
+                info="The size of the embedding layer"
+            )
+            sld_num_heads = gr.Slider(
+                label="Self-attention heads",
+                minimum=1,
+                maximum=32,
+                step=1,
+                value=4,
+                info="The number of heads in the attention layer"
+            )
+
+        with gr.Row():
+            sld_block_size = gr.Slider(
+                label="Block size",
+                minimum=1,
+                maximum=1024,
+                step=4,
+                value=256,
+                info="The number of tokens in each block"
+            )
+            sld_layers = gr.Slider(
+                label="Decoder layers",
+                minimum=1,
+                maximum=32,
+                step=1,
+                value=4,
+                info="The number of layers in the model"
+            )
+
+    # Training group
+    gr.Markdown(
+        """
+        ## Training Parameters
+        """
+    )
+    with gr.Group():
+        sld_batch_size = gr.Slider(
+            label="Batch size",
+            minimum=1,
+            maximum=512,
+            step=4,
+            value=32,
+            info="The number of samples to train on at once"
+        )
+        sld_epochs = gr.Slider(
+            label="Epochs",
+            minimum=1,
+            maximum=10000,
+            step=1,
+            value=5000,
+            info="The number of times to train on the dataset"
+        )
+        sld_learning_rate = gr.Slider(
+            label="Learning rate",
+            minimum=0.0001,
+            maximum=0.1,
+            step=0.0001,
+            value=0.0003,
+            info="The rate at which the model learns"
+        )
+
+    # Regularization group
+    gr.Markdown(
+        """
+        ## Regularization
+        """
+    )
+    with gr.Group():
+        sld_dropout = gr.Slider(
+            label="Dropout",
+            minimum=0.0,
+            maximum=0.5,
+            step=0.05,
+            value=0.2,
+            info="The neuron dropout rate"
+        )
+
+    # Evaluation group
+    gr.Markdown(
+        """
+        ## Evaluation
+        """
+    )
+    with gr.Group():
+        sld_eval_int = gr.Slider(
+            label="Evaluation interval",
+            minimum=1,
+            maximum=5000,
+            step=1,
+            value=500,
+            info="The number of steps between evaluations"
+        )
+        sld_eval_iterations = gr.Slider(
+            label="Evaluation iterations",
+            minimum=1,
+            maximum=1000,
+            step=1,
+            value=200,
+            info="The number of iterations to run during evaluation"
+        )
+
+    # Training group
+    gr.Markdown(
+        """
+        ## Train the Model
+        """
+    )
+    with gr.Group():
+        btn_train_start = gr.Button(
+            value="Start Training",
+            variant='primary',
+        )
+        txt_train_progress = gr.Textbox(
+            label="Training Progress",
+        )
 
 
 # The generator tab - Stub area for now
