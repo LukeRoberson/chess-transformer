@@ -103,11 +103,15 @@ class ChessTokenizer:
 
         # Check if we can resume training
         if resume and os.path.exists(resume_file):
-            self.load()
+            self.load(save_path)
 
             # Read the resume file
-            with open(os.path.join(resume_file), "r") as f:
-                resume_list = [line.strip() for line in f]
+            try:
+                with open(os.path.join(resume_file), "r") as f:
+                    resume_list = [line.strip() for line in f]
+            except Exception as e:
+                print(f"Error reading resume file: {e}")
+                return
 
             # Remove files from full_file_list if they exist in 'resume'
             full_file_list = [
@@ -132,8 +136,12 @@ class ChessTokenizer:
                 "[Mask]": 4,
             }
             trained_files = []
-            with open(resume_file, "w") as f:
-                f.write("")
+            try:
+                with open(resume_file, "w") as f:
+                    f.write("")
+            except Exception as e:
+                print(f"Error writing resume file: {e}")
+                return
 
         # Track the next value for the dictionary
         self.next_value = max(self.word2idx.values()) + 1
@@ -251,26 +259,46 @@ class ChessTokenizer:
         idx2word_path = f"{save_path}\\idx2word.json"
 
         # Save the files
-        with open(word2idx_path, "w") as f:
-            json.dump(word2idx, f)
+        try:
+            with open(word2idx_path, "w") as f:
+                json.dump(word2idx, f)
+        except Exception as e:
+            print(f"Error saving word2idx: {e}")
+            return
 
-        with open(idx2word_path, "w") as f:
-            json.dump(idx2word, f)
+        try:
+            with open(idx2word_path, "w") as f:
+                json.dump(idx2word, f)
+        except Exception as e:
+            print(f"Error saving idx2word: {e}")
+            return
 
     def load(
-        self
+        self,
+        path: str = '.'
     ) -> None:
         '''
         Load the mappings from JSON files
         JSON files use strings, so the keys need to be converted to integers
+
+        Args:
+            path: Path to the JSON files
         '''
 
-        # Open the files, and load the forward and  mappings
-        with open("word2idx.json", "r") as f:
-            self.word2idx = json.load(f)
+        # Open the files, and load the forward and reverse mappings
+        try:
+            with open(os.path.join(path, "word2idx.json"), "r") as f:
+                self.word2idx = json.load(f)
+        except Exception as e:
+            print(f"Error loading word2idx: {e}")
+            return
 
-        with open("idx2word.json", "r") as f:
-            self.idx2word = json.load(f)
+        try:
+            with open(os.path.join(path, "idx2word.json"), "r") as f:
+                self.idx2word = json.load(f)
+        except Exception as e:
+            print(f"Error loading idx2word: {e}")
+            return
 
         # Convert string keys to integer
         self.idx2word = {int(k): v for k, v in self.idx2word.items()}
@@ -288,9 +316,13 @@ class ChessTokenizer:
         '''
 
         # Just open the resume file and append the files
-        with open(path, "a") as f:
-            for file in files:
-                f.write(f"{file}\n")
+        try:
+            with open(path, "a") as f:
+                for file in files:
+                    f.write(f"{file}\n")
+        except Exception as e:
+            print(f"Error saving resume file: {e}")
+            return
 
     def tokenize(
         self,
@@ -392,8 +424,12 @@ class ChessTokenizer:
                 Each string is a complete game
         '''
 
-        with open(file_path, "r") as f:
-            moves = json.load(f)
+        try:
+            with open(file_path, "r") as f:
+                moves = json.load(f)
+        except Exception as e:
+            print(f"Error reading JSON file: {e}")
+            return []
 
         # A list of complete games
         game_list = []
