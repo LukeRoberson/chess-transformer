@@ -73,14 +73,19 @@ scheduler = CosineAnnealingWarmRestarts(
 # Training loop (epoch loop, full dataset)
 try:
     for epoch in range(config.epochs):
-        print(f"Starting epoch #{epoch}")
+        print(f"Starting epoch #{epoch + 1} of {config.epochs}")
 
         # Steps (batch loop) batches within an epoch
-        for batch in tqdm(
-            chess_dataset.data_iter('train'),
-            total=len(chess_dataset.train_data) // config.batch_size
+        model.train()
+        for batch_idx, batch in enumerate(
+            tqdm(
+                chess_dataset.data_iter('train'),
+                total=len(chess_dataset.train_data) // config.batch_size
+            )
         ):
-            # Warmup Phase
+            optimizer.zero_grad(set_to_none=True)
+
+            # Scheduler Warmup Phase
             if epoch < config.warmup_steps:
                 lr = config.learning_rate * (epoch / config.warmup_steps)
                 for param_group in optimizer.param_groups:
@@ -89,27 +94,31 @@ try:
                 # After warmup, adjust learning rate based on scheduler
                 scheduler.step(epoch - config.warmup_steps)
 
-            # Get a batch of training data
-            batch = chess_dataset.get_batch('train')
-            if batch is None:  # Check if the dataset has ended
-                break  # Exit the inner loop to start the next epoch
+            # Move to GPU
             xb, yb = batch
+            xb, yb = xb.to(config.device), yb.to(config.device)
 
             # Generate a mask for the input batch
             #   '[Pad]' tokens (2) are ignored in loss calculation
             mask = (xb != 2).float()
 
-            # evaluate the loss
+            # Forward pass
             logits, loss = model(xb, yb)
-            optimizer.zero_grad(set_to_none=True)
+
+            # Backward pass
             loss.backward()
             optimizer.step()
+            scheduler.step(epoch + batch_idx / len(chess_dataset.train_data))
+
+            # Free up memory
+            del xb, yb, mask, logits, loss
+            torch.cuda.empty_cache()
 
         # Evaluate every full epoch (epoch's are large)
         losses = model.estimate_loss(chess_dataset)
         print(
             Fore.GREEN,
-            f"Epoch #{epoch} results: "
+            f"Epoch #{epoch + 1} results: "
             f"training loss {losses['train']:.4f}, "
             f"validation loss {losses['val']:.4f}",
             Style.RESET_ALL

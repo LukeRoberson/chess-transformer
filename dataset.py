@@ -65,6 +65,9 @@ class DataSet():
         self.train_dataloader = None
         self.test_dataloader = None
 
+        # Iterator for the DataLoader
+        self.data_loader_iter = None
+
     def load(
         self
     ) -> None:
@@ -127,7 +130,11 @@ class DataSet():
             for game in game_list
         ]
 
-        print(f"Loaded {len(self.padded_game_list)} games into the dataset")
+        game_size = len(self.padded_game_list)
+        print(f"Loaded {game_size} games into the dataset.")
+        print(
+            f"Training on {game_size * (1.0 - self.config.test_split)} games"
+        )
 
     def split(
         self,
@@ -248,20 +255,12 @@ class DataSet():
         # Return the input and target tensors (a batch of data)
         return input, target
 
-    def data_iter(
-        self,
-        split: str = 'train',
-    ) -> Generator:
+    def data_iter(self, split: str = 'train') -> Generator:
         '''
         Iterate over the dataset
 
-        Creates a generator that yields batches of data at a time
-            This makes the function iterable, so it can be use in a for loop
-
-        The loop iterates over the 'data' in increments of batch_size'
-        For each iteration, it yields (returns) a slice of the dataset,
-            starting from the current index 'i', up to
-            'i + self.config.batch_size'
+        Creates a generator that yields batches of data and targets at a time.
+            This makes the function iterable, so it can be used in a for loop.
 
         This partitions the data into batches, allowing for processing large
             datasets in manageable chunks without loading the entire dataset
@@ -273,12 +272,31 @@ class DataSet():
                 Either 'train' or 'test'
 
         Yields:
-            List[List[str]]
+            Tuple[List[Any], List[Any]]
         '''
 
-        # Select the appropriate dataset
-        data = self.train_data if split == 'train' else self.test_data
+        # Choose the correct dataloader
+        if split == 'train':
+            data_loader = self.train_dataloader
+        else:
+            data_loader = self.test_dataloader
 
-        # Generate batches of data
-        for i in range(0, len(data), self.config.batch_size):
-            yield data[i:i + self.config.batch_size]
+        # Initialize the iterator if not already done or if it's exhausted
+        if self.data_loader_iter is None:
+            self.data_loader_iter = iter(data_loader)
+
+        while True:
+            try:
+                batch = next(self.data_loader_iter)
+                input, target = batch
+                yield input, target
+
+            # This handles running out of data in the iterator
+            except StopIteration:
+                self.data_loader_iter = iter(data_loader)
+                break
+
+
+if __name__ == '__main__':
+    print("This is a module for managing the dataset")
+    print("Please use 'model.py' for the main program")

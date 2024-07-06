@@ -9,10 +9,8 @@
 ## Transformer
 * Move the estimate_loss() function to the GPT model class
 * Move the training loop into the GPT model class
-* Add a scheduler
 * Save/load the model
 * Implement a scaler such as amp.GradScaler()
-* Consider torch.cuda.empty_cache() at the end of the batch loop
 
 ## Generation
 * Put move numbers back in when generating
