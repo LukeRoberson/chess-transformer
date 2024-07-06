@@ -11,6 +11,8 @@
 * Move the training loop into the GPT model class
 * Save/load the model
 * Implement a scaler such as amp.GradScaler()
+* Use a collate function to automatically move batches to GPU
+* weight decay
 
 ## Generation
 * Put move numbers back in when generating
@@ -18,8 +20,10 @@
 * Add temperature
 
 ## Dataset
-* Add an optional max game size option
-* Consider reshuffling the dataset with each epoch
+* Add an optional max game size option (80 moves / 160 tokens seems reasonable)
+    * Block size can be automatically adjusted based on this
+* Train on a percentage of the dataset per epoch
+    * Recreate the dataset with random files each time
 
 # Testing
 * See if a different activation function in the FFN has an effect

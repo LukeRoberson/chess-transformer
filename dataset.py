@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformer_blocks import GPTConfig
+from trainer import GPTTrainer
 
 import os
 import re
@@ -38,7 +39,8 @@ class DataSet():
 
     def __init__(
         self,
-        config: GPTConfig,
+        model_config: GPTConfig,
+        train_config: GPTTrainer,
         dataset_dir: str = './dataset'
     ) -> None:
         '''
@@ -53,8 +55,10 @@ class DataSet():
         '''
 
         # Required initial values
-        self.config = config
+        self.model_config = model_config
+        self.config = train_config
         self.dataset_dir = dataset_dir
+        self.tokenizer = model_config.tokenizer
 
         # Important values to be set later
         self.padded_game_list = None
@@ -113,10 +117,10 @@ class DataSet():
 
                             # Find the maximum length of a game
                             if len(
-                                self.config.tokenizer.tokenize(game)
+                                self.tokenizer.tokenize(game)
                             ) > max_length:
                                 max_length = len(
-                                    self.config.tokenizer.tokenize(game)
+                                    self.tokenizer.tokenize(game)
                                 )
 
                 except (IOError, json.JSONDecodeError) as e:
@@ -126,14 +130,15 @@ class DataSet():
         #   This means all lists are the same size
         #   This is needed to convert to tensor later
         self.padded_game_list = [
-            self.config.tokenizer.tokenize(game, pad=True, pad_size=max_length)
+            self.tokenizer.tokenize(game, pad=True, pad_size=max_length)
             for game in game_list
         ]
 
         game_size = len(self.padded_game_list)
         print(f"Loaded {game_size} games into the dataset.")
         print(
-            f"Training on {game_size * (1.0 - self.config.test_split)} games"
+            f"Training on {int(game_size * (1.0 - self.config.test_split))}"
+            " games"
         )
 
     def split(
@@ -203,12 +208,12 @@ class DataSet():
         # Create DataLoader objects for the training and testing sets
         self.train_dataloader = DataLoader(
             train_dataset,
-            batch_size=self.config.batch_size,
+            batch_size=self.model_config.batch_size,
             shuffle=shuffle
         )
         self.test_dataloader = DataLoader(
             test_dataset,
-            batch_size=self.config.batch_size,
+            batch_size=self.model_config.batch_size,
             shuffle=False
         )
 
@@ -249,8 +254,8 @@ class DataSet():
 
         # Get the input and target tensors, and move to the right device
         input, target = batch
-        input = input.to(self.config.device)
-        target = target.to(self.config.device)
+        input = input.to(self.model_config.device)
+        target = target.to(self.model_config.device)
 
         # Return the input and target tensors (a batch of data)
         return input, target
