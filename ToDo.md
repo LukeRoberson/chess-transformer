@@ -11,6 +11,8 @@
 * Move the training loop into the GPT model class
 * Add a scheduler
 * Save/load the model
+* Implement a scaler such as amp.GradScaler()
+* Consider torch.cuda.empty_cache() at the end of the batch loop
 
 ## Generation
 * Put move numbers back in when generating
@@ -19,6 +21,7 @@
 
 ## Dataset
 * Add an optional max game size option
+* Consider reshuffling the dataset with each epoch
 
 # Testing
 * See if a different activation function in the FFN has an effect

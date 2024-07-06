@@ -732,8 +732,7 @@ class GPTConfig():
         tokenizer: 'ChessTokenizer',
         batch_size: int = 64,
         block_size: int = 256,
-        max_iters: int = 5000,
-        eval_interval: int = 500,
+        epochs: int = 5000,
         learning_rate: float = 3e-4,
         eval_iters: int = 200,
         n_embd: int = 384,
@@ -741,7 +740,8 @@ class GPTConfig():
         n_layer: int = 4,
         dropout: float = 0.2,
         pad_token: int = 0,
-        test_split: float = 0.2
+        test_split: float = 0.2,
+        warmup_steps: int = 10,
     ) -> None:
         '''
         Setup the hyperparameters for the model
@@ -762,10 +762,6 @@ class GPTConfig():
 
             max_iters: int
                 The number of epochs to train for
-
-            eval_interval: int
-                How often to evaluate the model
-                Runs the loss on the validation set
 
             learning_rate: float
                 The learning rate for the model
@@ -794,6 +790,9 @@ class GPTConfig():
             test_split: float
                 The size of the training set
                 The rest is used for validation
+
+            warmup_steps: int
+                The number of warmup steps for the learning rate scheduler
         '''
 
         # Hardware
@@ -811,11 +810,11 @@ class GPTConfig():
         self.n_layer = n_layer
 
         # Evaluation
-        self.max_iters = max_iters
-        self.eval_interval = eval_interval
+        self.epochs = epochs
 
         # Training
         self.learning_rate = learning_rate
+        self.warmup_steps = warmup_steps
         self.eval_iters = eval_iters
         self.test_split = test_split
 

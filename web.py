@@ -294,11 +294,12 @@ with gr.Blocks() as train_tab:
         )
         sld_learning_rate = gr.Slider(
             label="Learning rate",
-            minimum=0.0001,
-            maximum=0.1,
+            minimum=0.00001,
+            maximum=0.01,
             step=0.0001,
-            value=0.0003,
-            info="The rate at which the model learns"
+            value=0.0002,
+            info="The initial learning rate for the optimizer.\
+                This adjusts dynamically over time"
         )
 
     # Regularization group

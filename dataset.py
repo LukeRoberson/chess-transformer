@@ -12,7 +12,7 @@ import re
 import json
 from tqdm import tqdm
 
-from typing import Tuple
+from typing import Tuple, Generator
 
 
 class DataSet():
@@ -31,6 +31,9 @@ class DataSet():
 
         get_batch:
             Get a batch of data from the training or testing set
+
+        data_iter:
+            Iterate over the dataset in batches
     '''
 
     def __init__(
@@ -124,6 +127,8 @@ class DataSet():
             for game in game_list
         ]
 
+        print(f"Loaded {len(self.padded_game_list)} games into the dataset")
+
     def split(
         self,
         test_size: float = 0.2,
@@ -205,7 +210,7 @@ class DataSet():
         split: str = 'train'
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         '''
-        Get a batch of data from the training or testing set
+        Get a single batch of data from the training or testing set
         This returns a batch of input and target tensors
             They are automatically moved to the right device
 
@@ -215,21 +220,65 @@ class DataSet():
                 Either 'train' or 'test'
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]
+            Tuple[torch.Tensor, torch.Tensor] or None
                 The input and target tensors
+                None if all batches are exhausted
         '''
 
-        # Get the correct dataloader (test or train)
+        # Get the correct dataloader (test or train) as an iterator
         data_loader = (
             self.train_dataloader
             if split == 'train'
             else self.test_dataloader
         )
+        data_loader_iter = iter(data_loader)
+
+        # Get the next batch, or return None if the iterator is exhausted
+        batch = next(data_loader_iter, None)
+
+        # If the iterator is exhausted and returned None, return None
+        if batch is None:
+            return None
 
         # Get the input and target tensors, and move to the right device
-        for input, target in data_loader:
-            input = input.to(self.config.device)
-            target = target.to(self.config.device)
+        input, target = batch
+        input = input.to(self.config.device)
+        target = target.to(self.config.device)
 
         # Return the input and target tensors (a batch of data)
         return input, target
+
+    def data_iter(
+        self,
+        split: str = 'train',
+    ) -> Generator:
+        '''
+        Iterate over the dataset
+
+        Creates a generator that yields batches of data at a time
+            This makes the function iterable, so it can be use in a for loop
+
+        The loop iterates over the 'data' in increments of batch_size'
+        For each iteration, it yields (returns) a slice of the dataset,
+            starting from the current index 'i', up to
+            'i + self.config.batch_size'
+
+        This partitions the data into batches, allowing for processing large
+            datasets in manageable chunks without loading the entire dataset
+            into memory at once, enhancing memory efficiency.
+
+        Args:
+            split: str
+                The split to iterate over
+                Either 'train' or 'test'
+
+        Yields:
+            List[List[str]]
+        '''
+
+        # Select the appropriate dataset
+        data = self.train_data if split == 'train' else self.test_data
+
+        # Generate batches of data
+        for i in range(0, len(data), self.config.batch_size):
+            yield data[i:i + self.config.batch_size]
