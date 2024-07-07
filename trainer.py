@@ -126,7 +126,8 @@ class GPTTrainer():
 
             # Move to GPU
             xb, yb = batch
-            xb, yb = xb.to(self.device), yb.to(self.device)
+            xb = xb.to(self.device, non_blocking=True)
+            yb = yb.to(self.device, non_blocking=True)
 
             # Generate a mask for the input batch
             #   '[Pad]' tokens (2) are ignored in loss calculation

@@ -26,7 +26,7 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=32,
+    batch_size=64,
     block_size=384,
     n_embd=256,
     n_head=2,
@@ -38,7 +38,7 @@ print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
-    epochs=2,
+    epochs=10,
     learning_rate=2e-4,
     warmup_steps=10,
     test_split=0.2,

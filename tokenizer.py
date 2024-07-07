@@ -360,6 +360,7 @@ class ChessTokenizer:
             self.word2idx['[End]']
         ]
 
+        # If requested, pad out the sequence to a fixed length
         if pad:
             token_ids += (
                 [self.word2idx[self.pad]] * (pad_size - len(token_ids))

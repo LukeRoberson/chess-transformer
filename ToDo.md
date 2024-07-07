@@ -8,7 +8,6 @@
 
 ## Transformer
 * Save/load the model
-* Use a collate function to automatically move batches to GPU
 
 ## Generation
 * Put move numbers back in when generating
