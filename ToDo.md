@@ -7,10 +7,7 @@
 * Add a training progress tqdm to the tokenizer
 
 ## Transformer
-* Move the estimate_loss() function to the GPT model class
-* Move the training loop into the GPT model class
 * Save/load the model
-* Implement a scaler such as amp.GradScaler()
 * Use a collate function to automatically move batches to GPU
 * weight decay
 
