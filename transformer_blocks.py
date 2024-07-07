@@ -434,7 +434,6 @@ class GPTLanguageModel(nn.Module):
         self.device = config.device
         self.block_size = config.block_size
         self.pad_token = config.pad_token
-        self.eval_iters = config.eval_iters
 
         # Embedding layer for tokens; Essentially a 2D tensor
         #   A trainable matrix where each row represents a token
@@ -506,53 +505,6 @@ class GPTLanguageModel(nn.Module):
         # of nn.Linear and has a bias
         if isinstance(module, nn.Linear) and module.bias is not None:
             torch.nn.init.zeros_(module.bias)
-
-    @torch.no_grad()
-    def estimate_loss(
-        self,
-        dataset
-    ) -> dict:
-        '''
-        Estimate the loss of the model
-        Note, training is disabled during this process using
-            no_grad() and eval()
-
-        Args:
-            dataset: DataSet
-                The dataset to evaluate the model on
-
-        Returns:
-            dict
-                A dictionary of the loss on the training and validation sets
-        '''
-
-        # Dictionary to store the average losses
-        average_losses_train = {}
-
-        # Disable training
-        self.eval()
-
-        for split in ['train', 'val']:
-            # Initialize the losses tensor to all zeros
-            losses = torch.zeros(self.eval_iters)
-
-            # Loop through the evaluation iterations
-            for batch_index in range(self.eval_iters):
-                # Get a batch of data
-                X, Y = dataset.get_batch(split)
-
-                # Run the forward pass and get the loss
-                _, loss = self(X, Y)
-
-                # Store the loss in the tensor
-                losses[batch_index] = loss.item()
-
-            average_losses_train[split] = losses.mean()
-
-        # Enable training again
-        self.train()
-
-        return average_losses_train
 
     def forward(
         self,
@@ -732,7 +684,6 @@ class GPTConfig():
         tokenizer: 'ChessTokenizer',
         batch_size: int = 64,
         block_size: int = 256,
-        eval_iters: int = 200,
         n_embd: int = 384,
         n_head: int = 4,
         n_layer: int = 4,
@@ -793,7 +744,7 @@ class GPTConfig():
         self.n_layer = n_layer
 
         # Training
-        self.eval_iters = eval_iters
+        # self.eval_iters = eval_iters
 
         # Regularization
         self.dropout = dropout

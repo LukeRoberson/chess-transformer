@@ -6,7 +6,6 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformer_blocks import GPTConfig
-from trainer import GPTTrainer
 
 import os
 import re
@@ -40,7 +39,7 @@ class DataSet():
     def __init__(
         self,
         model_config: GPTConfig,
-        train_config: GPTTrainer,
+        train_config,
         dataset_dir: str = './dataset'
     ) -> None:
         '''

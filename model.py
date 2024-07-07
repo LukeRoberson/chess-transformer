@@ -28,9 +28,8 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=64,
+    batch_size=32,
     block_size=384,
-    eval_iters=50,
     n_embd=256,
     n_head=2,
     n_layer=2,
@@ -46,6 +45,7 @@ trainer = GPTTrainer(
     warmup_steps=10,
     test_split=0.2,
     model_config=model_config,
+    eval_iterations=50,
 )
 
 # Dataset management
@@ -131,7 +131,10 @@ try:
             torch.cuda.empty_cache()
 
         # Evaluate every full epoch (epoch's are large)
-        losses = model.estimate_loss(chess_dataset)
+        losses = trainer.estimate_loss(
+            dataset=chess_dataset,
+            model=model,
+        )
         print(
             Fore.GREEN,
             f"Epoch #{epoch + 1} results: "
