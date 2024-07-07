@@ -44,6 +44,10 @@ trainer = GPTTrainer(
     test_split=0.2,
     model_config=model_config,
     eval_iterations=50,
+    weight_decay=0.01,
+    sched_first_cycle=10,
+    sched_cycle_factor=2,
+    sched_min_lr=1e-6,
 )
 
 # Dataset management
@@ -75,15 +79,16 @@ print(f'{model.param_count/1e6}M parameters')
 # Create a PyTorch optimizer
 optimizer = torch.optim.AdamW(
     model.parameters(),
-    lr=trainer.learning_rate
+    lr=trainer.learning_rate,
+    weight_decay=trainer.weight_decay,
 )
 
 # Initialize the scheduler
 scheduler = CosineAnnealingWarmRestarts(
     optimizer,
-    T_0=10,
-    T_mult=1,
-    eta_min=1e-6
+    T_0=trainer.sched_first_cycle,
+    T_mult=trainer.sched_cycle_factor,
+    eta_min=trainer.sched_min_lr,
 )
 
 # Initialise the scaler

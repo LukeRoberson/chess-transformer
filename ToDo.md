@@ -9,7 +9,6 @@
 ## Transformer
 * Save/load the model
 * Use a collate function to automatically move batches to GPU
-* weight decay
 
 ## Generation
 * Put move numbers back in when generating
@@ -23,4 +22,3 @@
 # Testing
 * See if a different activation function in the FFN has an effect
 * See if adding biases in the attention heads makes a difference
-* Can we dynamically adjust batch size based on consumed VRAM?

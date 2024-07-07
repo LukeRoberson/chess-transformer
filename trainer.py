@@ -27,68 +27,54 @@ class GPTTrainer():
         warmup_steps: int = 10,
         test_split: float = 0.2,
         eval_iterations: int = 50,
+        weight_decay: float = 0.01,
+        sched_first_cycle: int = 10,
+        sched_cycle_factor: int = 1,
+        sched_min_lr: float = 1e-6,
     ) -> None:
         '''
         Initialize the GPTTrainer class
+
+        Args:
+            model_config: GPTConfig
+                The configuration for the model
+            epochs: int
+                The number of epochs to train for
+            learning_rate: float
+                The learning rate for the optimizer
+            warmup_steps: int
+                The number of warmup steps to use for the scheduler
+            test_split: float
+                The percentage of the dataset to use for testing
+            eval_iterations: int
+                The number of iterations to use for evaluation
+            weight_decay: float
+                The weight decay to use for the optimizer
+            sched_first_cycle: int
+                The number of steps in the first cycle of the scheduler
+            sched_cycle_factor: int
+                The factor to use for the cycle length of the scheduler
+            sched_min_lr: float
+                The minimum learning rate to use for the scheduler
         '''
 
         # Set up configuration values
         self.epochs = epochs
         self.learning_rate = learning_rate
-        self.warmup_steps = warmup_steps
         self.test_split = test_split
         self.model_config = model_config
         self.eval_iterations = eval_iterations
         self.batch_size = model_config.batch_size
         self.device = model_config.device
 
-    @torch.no_grad()
-    def estimate_loss(
-        self,
-        dataset: DataSet,
-        model: GPTLanguageModel,
-    ) -> dict:
-        '''
-        Estimate the loss of the model
-        Note, training is disabled during this process using
-            no_grad() and eval()
+        # Regularization
+        self.weight_decay = weight_decay
 
-        Args:
-            dataset: DataSet
-                The dataset to evaluate the model on
-
-        Returns:
-            dict
-                A dictionary of the loss on the training and validation sets
-        '''
-
-        # Dictionary to store the average losses
-        average_losses_train = {}
-
-        # Disable training
-        model.eval()
-
-        for split in ['train', 'val']:
-            # Initialize the losses tensor to all zeros
-            losses = torch.zeros(self.eval_iterations)
-
-            # Loop through the evaluation iterations
-            for batch_index in range(self.eval_iterations):
-                # Get a batch of data
-                X, Y = dataset.get_batch(split)
-
-                # Run the forward pass and get the loss
-                _, loss = model(X, Y)
-
-                # Store the loss in the tensor
-                losses[batch_index] = loss.item()
-
-            average_losses_train[split] = losses.mean()
-
-        # Enable training again
-        model.train()
-
-        return average_losses_train
+        # Scheduler
+        self.warmup_steps = warmup_steps
+        self.sched_first_cycle = sched_first_cycle
+        self.sched_cycle_factor = sched_cycle_factor
+        self.sched_min_lr = sched_min_lr
 
     def train(
         self,
@@ -174,3 +160,51 @@ class GPTTrainer():
             f"validation loss {losses['val']:.4f}",
             Style.RESET_ALL
         )
+
+    @torch.no_grad()
+    def estimate_loss(
+        self,
+        dataset: DataSet,
+        model: GPTLanguageModel,
+    ) -> dict:
+        '''
+        Estimate the loss of the model
+        Note, training is disabled during this process using
+            no_grad() and eval()
+
+        Args:
+            dataset: DataSet
+                The dataset to evaluate the model on
+
+        Returns:
+            dict
+                A dictionary of the loss on the training and validation sets
+        '''
+
+        # Dictionary to store the average losses
+        average_losses_train = {}
+
+        # Disable training
+        model.eval()
+
+        for split in ['train', 'val']:
+            # Initialize the losses tensor to all zeros
+            losses = torch.zeros(self.eval_iterations)
+
+            # Loop through the evaluation iterations
+            for batch_index in range(self.eval_iterations):
+                # Get a batch of data
+                X, Y = dataset.get_batch(split)
+
+                # Run the forward pass and get the loss
+                _, loss = model(X, Y)
+
+                # Store the loss in the tensor
+                losses[batch_index] = loss.item()
+
+            average_losses_train[split] = losses.mean()
+
+        # Enable training again
+        model.train()
+
+        return average_losses_train
