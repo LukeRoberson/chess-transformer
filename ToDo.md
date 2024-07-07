@@ -17,8 +17,6 @@
 * Add temperature
 
 ## Dataset
-* Add an optional max game size option (80 moves / 160 tokens seems reasonable)
-    * Block size can be automatically adjusted based on this
 * Train on a percentage of the dataset per epoch
     * Recreate the dataset with random files each time
 

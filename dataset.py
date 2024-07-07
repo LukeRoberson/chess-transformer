@@ -72,14 +72,36 @@ class DataSet():
         self.data_loader_iter = None
 
     def load(
-        self
+        self,
+        min_moves: int = 6,
+        max_moves: int = 190,
     ) -> None:
         '''
         Load the dataset from JSON files
 
+        NOTE: Here we measure moves as each move a player makes
+            This means each player's move is counted as a move
+            Two moves makes one full turn
+            Each move is one token in the dataset
+
         We need to track the longest game so we can later pad shorter games,
             so they're all the same length.
             This is needed to convert to a tensor later on.
+
+        Args:
+            min_moves: int
+                The minimum number of moves a game must have to be included
+            max_moves: int
+                The maximum number of moves a game can have to be included
+                Lowering this value can reduce the dataset size
+                This also affects the block size of the model
+                    Less moves = smaller block size = Less parameters
+                    Remember to factor in start and end tokens
+
+        Returns:
+            int
+                The length of the longest game in the dataset
+                This can be used to set the block size of the model
         '''
 
         # A starting point for the game list
@@ -87,6 +109,10 @@ class DataSet():
 
         # Track the longest game
         max_length = 0
+
+        # Track excluded games
+        too_short = 0
+        too_long = 0
 
         # Get a list of all JSON files in the dataset directory
         for file in tqdm(
@@ -111,6 +137,16 @@ class DataSet():
                                 game['pgn']
                             ).strip()
 
+                            # Skip extrememly short games
+                            if len(game.split(" ")) < 6:
+                                too_short += 1
+                                continue
+
+                            # Skip games that are quite long
+                            if len(game.split(" ")) > max_moves:
+                                too_long += 1
+                                continue
+
                             # Add the game to the list
                             game_list.append(game)
 
@@ -124,6 +160,16 @@ class DataSet():
 
                 except (IOError, json.JSONDecodeError) as e:
                     print(f"Error processing file {file}: {e}")
+
+        print(f"Longest included game is {max_length} individual moves")
+        print(
+            f"Excluded {too_short} games that were too short "
+            f"({(too_short/(len(game_list) + too_short + too_long))*100:.2f}%)"
+        )
+        print(
+            f"Excluded {too_long} games that were too long "
+            f"({(too_long/(len(game_list) + too_short + too_long))*100:.2f}%)"
+        )
 
         # Tokenize and pad each game list to the maximum length
         #   This means all lists are the same size
@@ -139,6 +185,8 @@ class DataSet():
             f"Training on {int(game_size * (1.0 - self.config.test_split))}"
             " games"
         )
+
+        return max_length
 
     def split(
         self,

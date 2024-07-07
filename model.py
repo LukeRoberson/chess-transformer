@@ -52,9 +52,18 @@ chess_dataset = DataSet(
     train_config=trainer,
     dataset_dir='./dataset',
 )
-chess_dataset.load()
-chess_dataset.split(test_size=trainer.test_split)
+block_size = chess_dataset.load(
+    min_moves=6,
+    max_moves=190,
+)
+chess_dataset.split(
+    test_size=trainer.test_split
+)
 chess_dataset.create_dataloaders()
+
+# Update the block size in the model config
+#   No sense being larger than the dataset block size
+model_config.block_size = block_size
 
 # Create the model
 model = GPTLanguageModel(
