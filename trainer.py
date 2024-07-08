@@ -31,6 +31,7 @@ class GPTTrainer():
         sched_first_cycle: int = 10,
         sched_cycle_factor: int = 1,
         sched_min_lr: float = 1e-6,
+        resume: bool = False,
     ) -> None:
         '''
         Initialize the GPTTrainer class
@@ -56,6 +57,8 @@ class GPTTrainer():
                 The factor to use for the cycle length of the scheduler
             sched_min_lr: float
                 The minimum learning rate to use for the scheduler
+            resume: bool
+                Whether to resume training from a checkpoint
         '''
 
         # Set up configuration values
@@ -75,6 +78,9 @@ class GPTTrainer():
         self.sched_first_cycle = sched_first_cycle
         self.sched_cycle_factor = sched_cycle_factor
         self.sched_min_lr = sched_min_lr
+
+        # Resume training
+        self.resume = resume
 
     def train(
         self,

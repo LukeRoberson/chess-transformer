@@ -10,10 +10,7 @@
 * Found some tokens with an '@' symbol (unsure why?)
 
 ## Transformer
-* Save the model
-* Load the model
 * Resume training
-* Inferencing only
 * Save losses in the model checkpoint
 * Save model architecture
 
