@@ -680,6 +680,7 @@ class GPTLanguageModel(nn.Module):
         optimizer: torch.optim.Optimizer = None,
         scheduler: torch.optim.lr_scheduler._LRScheduler = None,
         epoch: int = None,
+        loss_history: dict = None
     ) -> bool:
         '''
         Save the model
@@ -696,6 +697,7 @@ class GPTLanguageModel(nn.Module):
             optimizer: The optimizer used during training.
             scheduler: The learning rate scheduler used during training.
             epoch: The current epoch number.
+            loss_history: A dictionary of the loss history.
 
         Returns:
             bool
@@ -716,13 +718,18 @@ class GPTLanguageModel(nn.Module):
             print('Epoch not provided. Skipping save...')
             return False
 
+        if loss_history is None:
+            print('Loss history not provided. Skipping save...')
+            return False
+
         # Collect all the information we need to save
         print(f'Saving at epoch {epoch + 1}')
         checkpoint = {
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'epoch': epoch
+            'epoch': epoch,
+            'loss_history': loss_history,
         }
 
         # Save the model
@@ -739,7 +746,7 @@ class GPTLanguageModel(nn.Module):
         filename: str = 'model.pth',
         optimizer=None,
         scheduler=None
-    ) -> int | None:
+    ) -> Tuple[int, dict] | None:
         '''
         Load a checkpoint
             Restore the model, optimizer, and scheduler states.
@@ -751,7 +758,10 @@ class GPTLanguageModel(nn.Module):
             scheduler: The scheduler object to load the state into
 
         Returns:
-            epoch: The epoch number to resume training from.
+            epoch: int
+                The epoch number to resume training from.
+            loss_history: dict
+                The loss history to resume training from.
         '''
 
         # Load the checkpoint file
@@ -775,11 +785,12 @@ class GPTLanguageModel(nn.Module):
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
                 epoch = checkpoint.get('epoch', None)
+                loss_history = checkpoint.get('loss_history', None)
         except Exception as e:
             print(f'Error loading optimizer and scheduler states: {e}')
             return None
 
-        return epoch
+        return epoch, loss_history
 
 
 class GPTConfig():

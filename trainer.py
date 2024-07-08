@@ -119,16 +119,29 @@ class GPTTrainer():
         '''
 
         # Set the starting epoch
-        epoch = 1
+        epoch = 0
+
+        # Initialise a losses dictionary
+        loss_history = {}
 
         # Resume training from a checkpoint, will update starting epoch
         if resume:
             # Load the model from the checkpoint
-            epoch = model.load_checkpoint(
+            epoch, loss_history = model.load_checkpoint(
                 optimizer=optimizer,
                 scheduler=scheduler,
                 filename=checkpoint,
             )
+
+            # Print previous loss history
+            for epoch_num, losses in loss_history.items():
+                print(
+                    Fore.GREEN,
+                    f"Epoch #{epoch_num + 1} results: "
+                    f"training loss {losses['train']:.4f}, "
+                    f"validation loss {losses['val']:.4f}",
+                    Style.RESET_ALL
+                )
 
             # The next epoch is the completed epoch + 1
             epoch += 1
@@ -146,7 +159,8 @@ class GPTTrainer():
             for batch_idx, batch in enumerate(
                 tqdm(
                     dataset.data_iter('train'),
-                    total=len(dataset.train_data) // self.batch_size
+                    total=len(dataset.train_data) // self.batch_size,
+                    colour='yellow',
                 )
             ):
                 optimizer.zero_grad(set_to_none=True)
@@ -190,6 +204,8 @@ class GPTTrainer():
                 dataset=dataset,
                 model=model,
             )
+            loss_history[epoch_num] = losses
+
             print(
                 Fore.GREEN,
                 f"Epoch #{epoch + 1} results: "
@@ -203,6 +219,7 @@ class GPTTrainer():
                 optimizer=optimizer,
                 scheduler=scheduler,
                 epoch=epoch_num,
+                loss_history=loss_history,
             )
 
     @torch.no_grad()
@@ -238,7 +255,7 @@ class GPTTrainer():
             # Loop through the evaluation iterations
             for batch_index in tqdm(
                 range(self.eval_iterations),
-                desc="Estimating loss",
+                desc=f"Estimating {split} loss",
                 colour='green',
             ):
                 # Get a batch of data
