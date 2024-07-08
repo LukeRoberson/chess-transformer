@@ -38,7 +38,7 @@ print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
-    epochs=2,
+    epochs=10,
     learning_rate=2e-4,
     warmup_steps=10,
     test_split=0.2,
