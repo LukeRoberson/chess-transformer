@@ -9,6 +9,7 @@ from dataset import DataSet
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.cuda.amp import autocast, GradScaler
+from torch.cuda import Stream
 
 from tqdm import tqdm
 from colorama import Fore, Style
@@ -118,6 +119,10 @@ class GPTTrainer():
                 The path to the checkpoint to resume from
         '''
 
+        # Setup CUDA streams for faster data transfer
+        data_stream = Stream()
+        comp_stream = Stream()
+
         # Set the starting epoch
         epoch = 0
 
@@ -174,32 +179,27 @@ class GPTTrainer():
                     # After warmup, adjust learning rate based on scheduler
                     scheduler.step(epoch_num - self.warmup_steps)
 
-                # Move to GPU
+                # Move to GPU, using CUDA streams for faster data transfer
                 xb, yb = batch
-                xb = xb.to(self.device, non_blocking=True)
-                yb = yb.to(self.device, non_blocking=True)
+                with torch.cuda.stream(data_stream):
+                    xb = xb.to(self.device, non_blocking=True)
+                    yb = yb.to(self.device, non_blocking=True)
 
-                # Generate a mask for the input batch
-                #   '[Pad]' tokens (2) are ignored in loss calculation
-                mask = (xb != 2).float()
+                # Forward pass and backpropagation, using CUDA streams
+                with torch.cuda.stream(comp_stream):
+                    # Forward pass
+                    with autocast():
+                        _, loss = model(xb, yb)
 
-                # Forward pass
-                with autocast():
-                    logits, loss = model(xb, yb)
+                    # Mixed precision backpropagation
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
 
-                # Mixed precision backpropagation
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                    # Update the scheduler
+                    scheduler.step(epoch + batch_idx / len(dataset.train_data))
 
-                # Update the scheduler
-                scheduler.step(epoch + batch_idx / len(dataset.train_data))
-
-                # Free up VRAM
-                del xb, yb, mask, logits, loss
-                torch.cuda.empty_cache()
-
-            # Evaluate every full epoch (epoch's are large)
+            # Evaluate every full epoch
             losses = self.estimate_loss(
                 dataset=dataset,
                 model=model,

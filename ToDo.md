@@ -12,8 +12,6 @@
 * Found some tokens with an '@' symbol (unsure why?)
 
 ## Transformer
-* Save losses in the model checkpoint
-* When resuming, print losses so far
 * Save model architecture (to handle dynamic block sizes based on game limit)
 * Append epoch number to model filenames
 
@@ -32,3 +30,4 @@
 
 # Wishlist
 * See if it's possible to include JSON data in the checkpoint (for tokenizer)
+* Separate forward pass from the loss?

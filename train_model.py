@@ -26,9 +26,9 @@ model_config = GPTConfig(
     tokenizer=tokenizer,
     batch_size=64,
     block_size=384,
-    n_embd=128,
-    n_head=1,
-    n_layer=1,
+    n_embd=256,
+    n_head=2,
+    n_layer=2,
     dropout=0.2,
     pad_token=tokenizer.pad_number,
 )
@@ -36,7 +36,7 @@ print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
-    epochs=3,
+    epochs=2,
     learning_rate=2e-4,
     warmup_steps=10,
     test_split=0.2,
@@ -99,7 +99,7 @@ trainer.train(
     optimizer=optimizer,
     scheduler=scheduler,
     scaler=scaler,
-    resume=True,
+    resume=False,
     checkpoint='model.pth',
 )
 
