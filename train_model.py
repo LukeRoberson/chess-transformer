@@ -26,7 +26,7 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=32,
+    batch_size=64,
     block_size=384,
     n_embd=256,
     n_head=2,

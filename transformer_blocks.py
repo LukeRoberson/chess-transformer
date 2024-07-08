@@ -396,6 +396,10 @@ class GPTLanguageModel(nn.Module):
             Training or inference
         generate:
             Generate new tokens from the model
+        save_checkpoint:
+            Save the model checkpoint
+        load_checkpoint:
+            Load a model checkpoint
     '''
 
     def __init__(
@@ -669,6 +673,112 @@ class GPTLanguageModel(nn.Module):
 
         # Finally, return the sequence of tokens
         return context
+
+    def save_checkpoint(
+        self,
+        filename: str = 'model.pth',
+        optimizer: torch.optim.Optimizer = None,
+        scheduler: torch.optim.lr_scheduler._LRScheduler = None,
+        epoch: int = None,
+    ) -> bool:
+        '''
+        Save the model
+        This collects:
+            The model state dictionary
+            The optimizer state dictionary
+            The scheduler state dictionary
+            The current epoch number
+
+        These extra parameters are needed to resume training
+
+        Args:
+            filename: The filename for saving the checkpoint.
+            optimizer: The optimizer used during training.
+            scheduler: The learning rate scheduler used during training.
+            epoch: The current epoch number.
+
+        Returns:
+            bool
+                True if the model was saved successfully
+                False if the model was not saved
+        '''
+
+        # Check all our parameters are provided
+        if optimizer is None:
+            print('Optimizer not provided. Skipping save...')
+            return False
+
+        if scheduler is None:
+            print('Scheduler not provided. Skipping save...')
+            return False
+
+        if epoch is None:
+            print('Epoch not provided. Skipping save...')
+            return False
+
+        # Collect all the information we need to save
+        checkpoint = {
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'epoch': epoch
+        }
+
+        # Save the model
+        try:
+            torch.save(checkpoint, filename)
+        except Exception as e:
+            print(f'Error saving model: {e}')
+            return False
+
+        return True
+
+    def load_checkpoint(
+        self,
+        filename: str = 'model.pth',
+        optimizer=None,
+        scheduler=None
+    ) -> int | None:
+        '''
+        Load a checkpoint
+            Restore the model, optimizer, and scheduler states.
+
+        Args:
+            filename: The filename of the checkpoint to load.
+            model: The model object to load the state into.
+            optimizer: The optimizer object to load the state into
+            scheduler: The scheduler object to load the state into
+
+        Returns:
+            epoch: The epoch number to resume training from.
+        '''
+
+        # Load the checkpoint file
+        try:
+            checkpoint = torch.load(filename)
+        except Exception as e:
+            print(f'Error loading model: {e}')
+            return None
+
+        # Load the model state
+        try:
+            self.load_state_dict(checkpoint['model_state_dict'])
+        except Exception as e:
+            print(f'Error loading model state: {e}')
+            return None
+
+        # Optionally load the optimizer and scheduler states
+        epoch = 0
+        try:
+            if optimizer and scheduler:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                epoch = checkpoint.get('epoch', None)
+        except Exception as e:
+            print(f'Error loading optimizer and scheduler states: {e}')
+            return None
+
+        return epoch
 
 
 class GPTConfig():

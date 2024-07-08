@@ -6,9 +6,16 @@
 * Open folder and open file windows to open on top
 * Add a training progress tqdm to the tokenizer
 
+## Tokenizer
+* Found some tokens with an '@' symbol (unsure why?)
+
 ## Transformer
-* Save/load the model
-* Use a collate function to automatically move batches to GPU
+* Save the model
+* Load the model
+* Resume training
+* Inferencing only
+* Save losses in the model checkpoint
+* Save model architecture
 
 ## Generation
 * Put move numbers back in when generating

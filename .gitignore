@@ -6,3 +6,4 @@ profiling_results.stats
 resume.txt
 /backup
 /flagged
+*.pth

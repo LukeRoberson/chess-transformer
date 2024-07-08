@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformer_blocks import GPTConfig
+from torch.nn.utils.rnn import pad_sequence
 
 import os
 import re
@@ -138,7 +139,7 @@ class DataSet():
                             ).strip()
 
                             # Skip extrememly short games
-                            if len(game.split(" ")) < 6:
+                            if len(game.split(" ")) < min_moves:
                                 too_short += 1
                                 continue
 
@@ -253,15 +254,20 @@ class DataSet():
         )
 
         # Create DataLoader objects for the training and testing sets
+        #   Pin memory to speed up data transfer to the GPU
         self.train_dataloader = DataLoader(
             train_dataset,
             batch_size=self.model_config.batch_size,
-            shuffle=shuffle
+            shuffle=shuffle,
+            collate_fn=self._collate_fn,
+            pin_memory=True,
         )
         self.test_dataloader = DataLoader(
             test_dataset,
             batch_size=self.model_config.batch_size,
-            shuffle=False
+            shuffle=False,
+            collate_fn=self._collate_fn,
+            pin_memory=True,
         )
 
     def get_batch(
@@ -347,6 +353,38 @@ class DataSet():
             except StopIteration:
                 self.data_loader_iter = iter(data_loader)
                 break
+
+    def _collate_fn(
+        self,
+        batch: Tuple[torch.Tensor, torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        '''
+        Collate function for the DataLoader
+
+        Practically, this doesn't do much, as the data is already padded
+            This can be modified in future
+        '''
+
+        # Batch is a list of tuples (sequence, label)
+        #   We need to convert this to a tuple of sequences and labels
+        sequences, labels = zip(*batch)
+
+        # Pad the sequences to have the same length
+        #   Output is a tensor (shape is batch size, block size)
+        sequences_padded = pad_sequence(
+            sequences,
+            batch_first=True,
+            padding_value=2
+        )
+
+        # Convert labels to a tensor
+        labels_padded = pad_sequence(
+            labels,
+            batch_first=True,
+            padding_value=2
+        )
+
+        return sequences_padded, labels_padded
 
 
 if __name__ == '__main__':
