@@ -717,6 +717,7 @@ class GPTLanguageModel(nn.Module):
             return False
 
         # Collect all the information we need to save
+        print(f'Saving at epoch {epoch + 1}')
         checkpoint = {
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),

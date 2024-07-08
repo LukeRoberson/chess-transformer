@@ -17,6 +17,14 @@ from colorama import Fore, Style
 class GPTTrainer():
     '''
     Class for training the GPT model
+
+    Methods:
+        train:
+            Train the model
+            Includes resuming from a checkpoint
+        estimate_loss:
+            Estimate the loss of the model
+            Calculates training and validation loss
     '''
 
     def __init__(
@@ -31,7 +39,6 @@ class GPTTrainer():
         sched_first_cycle: int = 10,
         sched_cycle_factor: int = 1,
         sched_min_lr: float = 1e-6,
-        resume: bool = False,
     ) -> None:
         '''
         Initialize the GPTTrainer class
@@ -57,8 +64,6 @@ class GPTTrainer():
                 The factor to use for the cycle length of the scheduler
             sched_min_lr: float
                 The minimum learning rate to use for the scheduler
-            resume: bool
-                Whether to resume training from a checkpoint
         '''
 
         # Set up configuration values
@@ -79,24 +84,24 @@ class GPTTrainer():
         self.sched_cycle_factor = sched_cycle_factor
         self.sched_min_lr = sched_min_lr
 
-        # Resume training
-        self.resume = resume
-
     def train(
         self,
-        epoch: int,
         model: GPTLanguageModel,
         dataset: DataSet,
         optimizer: torch.optim.Optimizer,
         scheduler: CosineAnnealingWarmRestarts,
         scaler: GradScaler,
+        resume: bool = False,
+        checkpoint: str = 'model.pth',
     ) -> None:
         '''
         The training loop for the GPT model
 
+        Supports resuming training from a checkpoint
+            To resume, set resume=True and provide the checkpoint path
+            This will pick up at the next epoch
+
         Args:
-            epoch: int
-                The current epoch number
             model: GPTLanguageModel
                 The model to train
             dataset: DataSet
@@ -107,73 +112,98 @@ class GPTTrainer():
                 The scheduler to use for training
             scaler: GradScaler
                 The scaler to use for mixed precision training
+            resume: bool
+                Whether to resume training from a checkpoint
+            checkpoint: str
+                The path to the checkpoint to resume from
         '''
 
-        print(f"Starting epoch #{epoch + 1} of {self.epochs}")
+        # Set the starting epoch
+        epoch = 1
 
-        # Steps (batch loop) batches within an epoch
-        model.train()
-        for batch_idx, batch in enumerate(
-            tqdm(
-                dataset.data_iter('train'),
-                total=len(dataset.train_data) // self.batch_size
+        # Resume training from a checkpoint, will update starting epoch
+        if resume:
+            # Load the model from the checkpoint
+            epoch = model.load_checkpoint(
+                optimizer=optimizer,
+                scheduler=scheduler,
+                filename=checkpoint,
             )
-        ):
-            optimizer.zero_grad(set_to_none=True)
 
-            # Scheduler Warmup Phase
-            if epoch < self.warmup_steps:
-                lr = self.learning_rate * (epoch / self.warmup_steps)
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr
-            else:
-                # After warmup, adjust learning rate based on scheduler
-                scheduler.step(epoch - self.warmup_steps)
+            # The next epoch is the completed epoch + 1
+            epoch += 1
+            print(f"Resuming training from epoch {epoch + 1}...")
 
-            # Move to GPU
-            xb, yb = batch
-            xb = xb.to(self.device, non_blocking=True)
-            yb = yb.to(self.device, non_blocking=True)
+        if epoch >= self.epochs:
+            print("Training complete!")
+            return
 
-            # Generate a mask for the input batch
-            #   '[Pad]' tokens (2) are ignored in loss calculation
-            mask = (xb != 2).float()
+        for epoch_num in range(epoch, self.epochs):
+            print(f"Epoch {epoch_num + 1} of {self.epochs}")
 
-            # Forward pass
-            with autocast():
-                logits, loss = model(xb, yb)
+            # Steps (batch loop) batches within an epoch
+            model.train()
+            for batch_idx, batch in enumerate(
+                tqdm(
+                    dataset.data_iter('train'),
+                    total=len(dataset.train_data) // self.batch_size
+                )
+            ):
+                optimizer.zero_grad(set_to_none=True)
 
-            # Mixed precision backpropagation
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+                # Scheduler Warmup Phase
+                if epoch_num < self.warmup_steps:
+                    lr = self.learning_rate * (epoch_num / self.warmup_steps)
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = lr
+                else:
+                    # After warmup, adjust learning rate based on scheduler
+                    scheduler.step(epoch_num - self.warmup_steps)
 
-            # Update the scheduler
-            scheduler.step(epoch + batch_idx / len(dataset.train_data))
+                # Move to GPU
+                xb, yb = batch
+                xb = xb.to(self.device, non_blocking=True)
+                yb = yb.to(self.device, non_blocking=True)
 
-            # Free up VRAM
-            del xb, yb, mask, logits, loss
-            torch.cuda.empty_cache()
+                # Generate a mask for the input batch
+                #   '[Pad]' tokens (2) are ignored in loss calculation
+                mask = (xb != 2).float()
 
-        # Evaluate every full epoch (epoch's are large)
-        losses = self.estimate_loss(
-            dataset=dataset,
-            model=model,
-        )
-        print(
-            Fore.GREEN,
-            f"Epoch #{epoch + 1} results: "
-            f"training loss {losses['train']:.4f}, "
-            f"validation loss {losses['val']:.4f}",
-            Style.RESET_ALL
-        )
+                # Forward pass
+                with autocast():
+                    logits, loss = model(xb, yb)
 
-        # Save the model
-        model.save_checkpoint(
-            optimizer=optimizer,
-            scheduler=scheduler,
-            epoch=epoch,
-        )
+                # Mixed precision backpropagation
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
+                # Update the scheduler
+                scheduler.step(epoch + batch_idx / len(dataset.train_data))
+
+                # Free up VRAM
+                del xb, yb, mask, logits, loss
+                torch.cuda.empty_cache()
+
+            # Evaluate every full epoch (epoch's are large)
+            losses = self.estimate_loss(
+                dataset=dataset,
+                model=model,
+            )
+            print(
+                Fore.GREEN,
+                f"Epoch #{epoch + 1} results: "
+                f"training loss {losses['train']:.4f}, "
+                f"validation loss {losses['val']:.4f}",
+                Style.RESET_ALL
+            )
+
+            # Save the model
+            model.save_checkpoint(
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=epoch_num,
+            )
 
     @torch.no_grad()
     def estimate_loss(
@@ -206,7 +236,11 @@ class GPTTrainer():
             losses = torch.zeros(self.eval_iterations)
 
             # Loop through the evaluation iterations
-            for batch_index in range(self.eval_iterations):
+            for batch_index in tqdm(
+                range(self.eval_iterations),
+                desc="Estimating loss",
+                colour='green',
+            ):
                 # Get a batch of data
                 X, Y = dataset.get_batch(split)
 

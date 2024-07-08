@@ -15,8 +15,6 @@ import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.cuda.amp import GradScaler
 
-import sys
-
 
 # Set up the tokenizer
 tokenizer = ChessTokenizer()
@@ -38,7 +36,7 @@ print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
-    epochs=10,
+    epochs=6,
     learning_rate=2e-4,
     warmup_steps=10,
     test_split=0.2,
@@ -95,20 +93,15 @@ scheduler = CosineAnnealingWarmRestarts(
 scaler = GradScaler()
 
 # Training loop (epoch loop, full dataset)
-try:
-    for epoch in range(trainer.epochs):
-        trainer.train(
-            epoch=epoch,
-            model=model,
-            dataset=chess_dataset,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            scaler=scaler,
-        )
-
-except KeyboardInterrupt:
-    print('Interrupted by user. Exiting...')
-    sys.exit(0)
+trainer.train(
+    model=model,
+    dataset=chess_dataset,
+    optimizer=optimizer,
+    scheduler=scheduler,
+    scaler=scaler,
+    resume=True,
+    checkpoint='model.pth',
+)
 
 # Generate a sequence of tokens from scratch
 sequence = model.generate(context=None, max_new_tokens=50)[0].tolist()
