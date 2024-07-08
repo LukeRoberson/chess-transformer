@@ -10,13 +10,9 @@
 * Found some tokens with an '@' symbol (unsure why?)
 
 ## Transformer
-<<<<<<< HEAD
 * Resume training
 * Save losses in the model checkpoint
 * Save model architecture
-=======
-* Save/load the model
->>>>>>> 509b1a4d637fef28d7fedbe0525b8430c0b0e0b1
 
 ## Generation
 * Put move numbers back in when generating
