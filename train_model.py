@@ -25,7 +25,7 @@ model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
     batch_size=64,
-    block_size=384,
+    block_size=192,
     n_embd=256,
     n_head=2,
     n_layer=2,
@@ -54,18 +54,6 @@ chess_dataset = DataSet(
     train_config=trainer,
     dataset_dir='./dataset',
 )
-block_size = chess_dataset.load(
-    min_moves=6,
-    max_moves=190,
-)
-chess_dataset.split(
-    test_size=trainer.test_split
-)
-chess_dataset.create_dataloaders()
-
-# Update the block size in the model config
-#   No sense being larger than the dataset block size
-model_config.block_size = block_size
 
 # Create the model
 model = GPTLanguageModel(
