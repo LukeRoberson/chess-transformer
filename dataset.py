@@ -6,19 +6,44 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformer_blocks import GPTConfig
-from torch.nn.utils.rnn import pad_sequence
 from tokenizer import ChessTokenizer
 
 import os
 import re
 import json
 from tqdm import tqdm
+import traceback
 
 from typing import Tuple, Generator
 
 
 class CreateDataSet():
-    # Create a dataset from a given list of JSON files
+    '''
+    Creates two dataloaders, given a list of JSON files
+    Supports being used as a context manager
+
+    Methods:
+        __init__:
+            Constructor
+
+        __enter__:
+            Context manager for the dataset
+
+        __exit__:
+            Context manager for the dataset
+
+        _collect_games:
+            Collect games from JSON files
+
+        _preprocess:
+            Preprocess and tokenize the games
+
+        _split:
+            Split the games into training and testing sets
+
+        _create_dataloaders:
+            Create dataloaders for the training and testing sets
+    '''
 
     def __init__(
         self,
@@ -28,23 +53,59 @@ class CreateDataSet():
         min_length: int = 6,
         block_size: int = 192,
     ) -> None:
-        # Setup basic values
-        # Get a list of files to process
+        '''
+        Constructor
+        Sets up the values for the dataset
+        Initializes needed objects
 
+        Args:
+            file_list: list
+                A list of JSON files to load games from
+            batch_size: int
+                The batch size for the dataloaders
+            tokenizer: ChessTokenizer
+                The tokenizer for the dataset
+            min_length: int
+                The minimum length of a game to be included
+            block_size: int
+                The block size for the model
+                Also the maximum length of a game in tokens
+        '''
+
+        # Setup the values for the dataset
         self.file_list = file_list
         self.batch_size = batch_size
         self.tokenizer = tokenizer
         self.block_size = block_size
         self.min_length = min_length
+        self.pad_id = tokenizer.pad_number
 
-        self.pad_id = 2
+        # Initialize the dataloaders
+        self.train_dataloader = None
+        self.test_dataloader = None
+        self.train_data_size = None
+        self.test_data_size = None
 
-        self.train_dataset = None
-        self.test_dataset = None
+        # Track the number of skipped games
         self.skipped_games = 0
 
-    def __enter__(self) -> None:
-        # Context manager for the dataset
+    def __enter__(
+        self
+    ) -> Tuple[DataLoader, DataLoader, int, int]:
+        '''
+        Context manager for the dataset
+        This is the main flow of the dataset creation
+
+        (1) Collect games from JSON files
+        (2) Preprocess and tokenize the games
+        (3) Split the games into training and testing sets
+        (4) Create dataloaders for the training and testing sets
+
+        Returns:
+            Tuple[DataLoader, DataLoader, int, int]
+                The training and testing dataloaders
+                The sizes of the training and testing sets
+        '''
 
         # Collect games from JSON files
         game_list = self._collect_games()
@@ -65,30 +126,74 @@ class CreateDataSet():
             test_labels
         )
 
+        # Return the dataloaders and the sizes of the training and testing sets
+        return (
+            self.train_dataloader,
+            self.test_dataloader,
+            self.train_data_size,
+            self.test_data_size
+        )
+
     def __exit__(
         self,
-        exc_type,
-        exc_val,
-        exc_tb
-    ) -> None:
-        # Context manager for the dataset
-        # Return the two datasets
+        exc_type: type,
+        exc_val: Exception,
+        exc_tb: traceback,
+    ) -> bool:
+        '''
+        Context manager for the dataset
+        Handles exceptions and cleans up resources
 
-        return self.train_dataset, self.test_dataset
+        Args:
+            exc_type: type
+                The type of the exception
+            exc_val: Exception
+                The exception object
+            exc_tb: traceback
+                The traceback object
+
+        Returns:
+            bool
+                Whether to propagate the exception or not
+        '''
+
+        # Handle exceptions
+        if exc_type is not None:
+            print(f"An error occurred: {exc_val}")
+            # Print the traceback if there's an exception
+            traceback.print_tb(exc_tb)
+
+        # Clean up resources
+        self.train_dataloader = None
+        self.test_dataloader = None
+        self.train_data_size = None
+        self.test_data_size = None
+
+        # Propagate exception if there is one
+        return False
 
     def _collect_games(
         self,
     ) -> list:
-        # Load JSON files, one at a time
-        # Extract games from JSON files
-        # Return a list of games as strings
+        '''
+        Collect games from JSON files
 
+        (1) Load JSON files, one at a time
+        (2) Extract games from JSON files
+        (3) Return a list of games as strings
+
+        Returns:
+            list
+                A list of raw games as strings
+        '''
+
+        # Loop through each JSON file and extract the games
         game_list = []
         for file in tqdm(self.file_list):
             # Load the JSON file
-            with open(f"{self.dataset_dir}/{file}", "r") as f:
+            with open(file, "r") as f:
                 game_file = json.load(f)
-            
+
             # Get the game year (there is one per file)
             year = list(game_file.keys())[0]
 
@@ -105,26 +210,49 @@ class CreateDataSet():
         self,
         game_list: list,
     ) -> list:
-        # Takes a list of games as strings
-        # Cleanup game strings
-        # Tokenize game strings
-        # Returns a list of tokenized games (list of lists)
+        '''
+        Preprocess and tokenize the games
 
+        (1) Cleanup game strings (eg, remove move numbers)
+        (2) Tokenize and pad the game strings
+        (3) Return a list of tokenized games (list of lists)
+
+        Args:
+            game_list: list
+                A list of raw games as strings
+
+        Returns:
+            list
+                A list of tokenized games as lists
+        '''
+
+        # Loop through each game and preprocess it
         processed_games = []
         for game in game_list:
             # Remove move numbers from the PGN
             game = re.sub(r"\d{1,3}\. ", "", game).strip()
 
-            # Tokenize the game
-            tokenized_game = self.tokenizer.tokenize(game, pad=False)
+            # Tokenize the game, and pad the sequence
+            tokenized_game = self.tokenizer.tokenize(
+                game,
+                pad=True,
+                pad_size=self.block_size
+            )
 
             # Skip games that are too short or too long
-            if self.min_length <= len(tokenized_game) <= self.block_size:
+            if (
+                len(tokenized_game) < self.min_length
+                or len(tokenized_game) > self.block_size
+            ):
                 self.skipped_games += 1
                 continue
 
             # Add the tokenized game to the list
             processed_games.append(tokenized_game)
+
+        # Print some interesting stats
+        print(f"skipped {self.skipped_games} games due to size")
+        print(f"{len(processed_games)} games pre-processed")
 
         return processed_games
 
@@ -133,30 +261,48 @@ class CreateDataSet():
         processed_games: list,
         split: float = 0.2,
     ) -> Tuple[list, list, list, list]:
-        # Takes a split value and a list of processed games
-        # Split a list of games into training and testing lists
-        #   (train_split, test_split)
-        # Create input and target sequences from these two lists
-        # Result: 4 lists (train_data, test_data, train_labels, test_labels)
+        '''
+        Split the games into training and testing sets
 
-        # Get input and target sequences
-        #   Target is input shifted right by one token
+        (1) Create input and target sequences from the games
+            The target is the input shifted right by one token
+        (2) Split the sequences into training and testing sets
+        (3) Return the training and testing sets
+
+        Args:
+            processed_games: list
+                A list of tokenized games as lists
+            split: float
+                The percentage size of the test set
+                The remainder is the training set
+
+        Returns:
+            Tuple[list, list, list, list]
+                The training and testing sets of input and target sequences
+        '''
+
         input_sequences = []
         target_sequences = []
 
+        # Get input and target sequences
+        #   Target is input shifted right by one token
         for game in processed_games:
             input_sequences.append(game[:-1])
             target_sequences.append(game[1:])
 
         # Split input_sequences and target_sequences into train and test sets
-        (
-            train_data, test_data, train_labels, test_labels
-        ) = train_test_split(
+        train_data, test_data, train_labels, test_labels = train_test_split(
             input_sequences,
             target_sequences,
             test_size=split,
         )
 
+        # Store the sizes of the training and testing sets
+        #   The scheduler needs this information later
+        self.train_data_size = len(train_data)
+        self.test_data_size = len(test_data)
+
+        # Return four lists
         return train_data, test_data, train_labels, test_labels
 
     def _create_dataloaders(
@@ -166,20 +312,31 @@ class CreateDataSet():
         train_labels: list,
         test_labels: list,
     ) -> None:
-        # Takes the four lists
-        # Combine four lists into two TensorDatasets
-        # Create DataLoader objects for the training and testing sets,
-        #   use collate_fn
-        # Store the DataLoader objects in self
+        '''
+        Create dataloaders for the training and testing sets
+
+        (1) Combine four lists into two TensorDatasets
+        (2) Create DataLoader objects for the training and testing sets
+
+        Args:
+            train_data: list
+                The training input sequences
+            test_data: list
+                The testing input sequences
+            train_labels: list
+                The training target sequences (labels)
+            test_labels: list
+                The testing target sequences (labels)
+        '''
 
         # Create TensorDatasets for the training and testing sets
         train_dataset = TensorDataset(
-            torch.tensor(self.train_data),
-            torch.tensor(self.train_labels)
+            torch.tensor(train_data),
+            torch.tensor(train_labels)
         )
         test_dataset = TensorDataset(
-            torch.tensor(self.test_data),
-            torch.tensor(self.test_labels)
+            torch.tensor(test_data),
+            torch.tensor(test_labels)
         )
 
         # Create DataLoader objects for the training and testing sets
@@ -188,47 +345,24 @@ class CreateDataSet():
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            collate_fn=self._collate_fn,
             pin_memory=True,
         )
         self.test_dataloader = DataLoader(
             test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
-            collate_fn=self._collate_fn,
             pin_memory=True,
         )
 
-    def _collate_fn(
-        self,
-        batch: Tuple[torch.Tensor, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Takes a batch of tensors
-        # Add padding to the sequences
-        # Returns a batch of padded sequences and labels
 
-        batch = pad_sequence(
-            batch,
-            batch_first=True,
-            padding_value=self.pad_id
-        )
-
-        return batch[:, :-1], batch[:, 1:]
-
-
-class DataSet():
+class ManageDataSet():
     '''
-    The class for loading and managing the dataset
+    The main class for managing the dataloaders
+    Uses the CreateDataSet class to create the dataloaders
 
     Methods:
-        load:
-            Load the dataset from JSON files
-
-        split:
-            Split the dataset into training and testing sets
-
-        create_dataloaders:
-            Create dataloaders for the training and testing sets
+        __init__:
+            Request dataloaders from the CreateDataSet class
 
         get_batch:
             Get a batch of data from the training or testing set
@@ -240,15 +374,22 @@ class DataSet():
     def __init__(
         self,
         model_config: GPTConfig,
-        train_config,
+        # train_config,
         dataset_dir: str = './dataset'
     ) -> None:
         '''
         Constructor
 
+        (1) Setup initial values
+        (2) Collect JSON files from the dataset directory
+        (3) Create a dataset using the context manager
+
         Args:
             config: GPTConfig
                 The configuration for the GPT model
+
+            train_config: dict
+                The configuration for training the model
 
             dataset_dir: str
                 The directory containing the dataset
@@ -256,233 +397,40 @@ class DataSet():
 
         # Required initial values
         self.model_config = model_config
-        self.config = train_config
         self.dataset_dir = dataset_dir
         self.tokenizer = model_config.tokenizer
 
         # Important values to be set later
-        self.padded_game_list = None
-        self.train_data = None
-        self.test_data = None
-        self.train_labels = None
-        self.test_labels = None
         self.train_dataloader = None
         self.test_dataloader = None
+        self.train_data_size = None
+        self.test_data_size = None
 
         # Iterator for the DataLoader
         self.data_loader_iter = None
 
-        # Load the dataset
-        self.load(
-            min_moves=6,
-            max_moves=190,
-        )
-
-        # Split the dataset
-        self.split(
-            test_size=0.2
-        )
-
-        # Create dataloaders
-        self.create_dataloaders()
-
-    def load(
-        self,
-        min_moves: int = 6,
-        max_moves: int = 190,
-    ) -> None:
-        '''
-        Load the dataset from JSON files
-
-        NOTE: Here we measure moves as each move a player makes
-            This means each player's move is counted as a move
-            Two moves makes one full turn
-            Each move is one token in the dataset
-
-        We need to track the longest game so we can later pad shorter games,
-            so they're all the same length.
-            This is needed to convert to a tensor later on.
-
-        Args:
-            min_moves: int
-                The minimum number of moves a game must have to be included
-            max_moves: int
-                The maximum number of moves a game can have to be included
-                Lowering this value can reduce the dataset size
-                This also affects the block size of the model
-                    Less moves = smaller block size = Less parameters
-                    Remember to factor in start and end tokens
-
-        Returns:
-            int
-                The length of the longest game in the dataset
-                This can be used to set the block size of the model
-        '''
-
-        # A starting point for the game list
-        game_list = []
-
-        # Track the longest game
-        max_length = 0
-
-        # Track excluded games
-        too_short = 0
-        too_long = 0
-
-        # Get a list of all JSON files in the dataset directory
+        # Get a list of all files in the dataset directory
+        file_list = []
         for file in tqdm(
             os.listdir(self.dataset_dir),
-            desc='Processing JSON files'
+            desc='Collecting JSON files'
         ):
             if file.endswith('.json'):
-                try:
-                    # Read the JSON file
-                    with open(f"{self.dataset_dir}/{file}", "r") as f:
-                        moves = json.load(f)
+                # Add to file list
+                file_list.append(f"{self.dataset_dir}/{file}")
 
-                    # Get the year of the game (only one per file)
-                    year = list(moves.keys())[0]
-
-                    # Parse the JSON file for games (by month and game)
-                    for month in moves[year]:
-                        for game in moves[year][month]:
-                            # Remove the move numbers from the PGN
-                            game = re.sub(
-                                r"\d{1,3}\. ", "",
-                                game['pgn']
-                            ).strip()
-
-                            # Skip extrememly short games
-                            if len(game.split(" ")) < min_moves:
-                                too_short += 1
-                                continue
-
-                            # Skip games that are quite long
-                            if len(game.split(" ")) > max_moves:
-                                too_long += 1
-                                continue
-
-                            # Add the game to the list
-                            game_list.append(game)
-
-                            # Find the maximum length of a game
-                            if len(
-                                self.tokenizer.tokenize(game)
-                            ) > max_length:
-                                max_length = len(
-                                    self.tokenizer.tokenize(game)
-                                )
-
-                except (IOError, json.JSONDecodeError) as e:
-                    print(f"Error processing file {file}: {e}")
-
-        print(f"Longest included game is {max_length} individual moves")
-        print(
-            f"Excluded {too_short} games that were too short "
-            f"({(too_short/(len(game_list) + too_short + too_long))*100:.2f}%)"
-        )
-        print(
-            f"Excluded {too_long} games that were too long "
-            f"({(too_long/(len(game_list) + too_short + too_long))*100:.2f}%)"
-        )
-
-        # Tokenize and pad each game list to the maximum length
-        #   This means all lists are the same size
-        #   This is needed to convert to tensor later
-        self.padded_game_list = [
-            self.tokenizer.tokenize(game, pad=True, pad_size=max_length)
-            for game in game_list
-        ]
-
-        game_size = len(self.padded_game_list)
-        print(f"Loaded {game_size} games into the dataset.")
-        print(
-            f"Training on {int(game_size * (1.0 - self.config.test_split))}"
-            " games"
-        )
-
-        return max_length
-
-    def split(
-        self,
-        test_size: float = 0.2,
-    ) -> None:
-        '''
-        Split the dataset into training and testing sets
-
-        (1) Creates inputs and targets for the model
-            The targets (ground truth) are the inputs shifted right
-            by one token
-            This is because the model predicts the next token
-        (2) Splits each dataset into training and testing sets
-
-        Args:
-            test_size: float
-                The percentage size of the test set
-                The remainder is the training set
-        '''
-
-        # Get input and target sequences
-        #   Target is input shifted right by one token
-        input_sequences = []
-        target_sequences = []
-
-        for game in self.padded_game_list:
-            input_sequences.append(game[:-1])
-            target_sequences.append(game[1:])
-
-        # Split input_sequences and target_sequences into train and test sets
-        (
-            self.train_data, self.test_data,
-            self.train_labels, self.test_labels
-        ) = train_test_split(
-            input_sequences,
-            target_sequences,
-            test_size=test_size,
-        )
-
-    def create_dataloaders(
-        self,
-        shuffle: bool = True
-    ) -> None:
-        '''
-        Create dataloaders for the training and testing sets
-
-        (1) Create TensorDatasets for the training and testing sets
-        (2) Create DataLoader objects for the training and testing sets
-
-        Args:
-            shuffle: bool
-                Whether to shuffle the train dataset or not
-                Testing dataset is never shuffled
-        '''
-
-        # Create TensorDatasets for the training and testing sets
-        train_dataset = TensorDataset(
-            torch.tensor(self.train_data),
-            torch.tensor(self.train_labels)
-        )
-        test_dataset = TensorDataset(
-            torch.tensor(self.test_data),
-            torch.tensor(self.test_labels)
-        )
-
-        # Create DataLoader objects for the training and testing sets
-        #   Pin memory to speed up data transfer to the GPU
-        self.train_dataloader = DataLoader(
-            train_dataset,
+        # Create a dataset using the context manager
+        with CreateDataSet(
+            file_list=file_list,
             batch_size=self.model_config.batch_size,
-            shuffle=shuffle,
-            collate_fn=self._collate_fn,
-            pin_memory=True,
-        )
-        self.test_dataloader = DataLoader(
-            test_dataset,
-            batch_size=self.model_config.batch_size,
-            shuffle=False,
-            collate_fn=self._collate_fn,
-            pin_memory=True,
-        )
+            tokenizer=self.tokenizer,
+            min_length=6,
+            block_size=192,
+        ) as (train_dataset, test_dataset, train_size, test_size):
+            self.train_dataloader = train_dataset
+            self.test_dataloader = test_dataset
+            self.train_data_size = train_size
+            self.test_data_size = test_size
 
     def get_batch(
         self,
@@ -567,38 +515,6 @@ class DataSet():
             except StopIteration:
                 self.data_loader_iter = iter(data_loader)
                 break
-
-    def _collate_fn(
-        self,
-        batch: Tuple[torch.Tensor, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        '''
-        Collate function for the DataLoader
-
-        Practically, this doesn't do much, as the data is already padded
-            This can be modified in future
-        '''
-
-        # Batch is a list of tuples (sequence, label)
-        #   We need to convert this to a tuple of sequences and labels
-        sequences, labels = zip(*batch)
-
-        # Pad the sequences to have the same length
-        #   Output is a tensor (shape is batch size, block size)
-        sequences_padded = pad_sequence(
-            sequences,
-            batch_first=True,
-            padding_value=2
-        )
-
-        # Convert labels to a tensor
-        labels_padded = pad_sequence(
-            labels,
-            batch_first=True,
-            padding_value=2
-        )
-
-        return sequences_padded, labels_padded
 
 
 if __name__ == '__main__':

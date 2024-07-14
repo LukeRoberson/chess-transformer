@@ -9,7 +9,7 @@ from transformer_blocks import GPTLanguageModel
 from transformer_blocks import GPTConfig
 from trainer import GPTTrainer
 from tokenizer import ChessTokenizer
-from dataset import DataSet
+from dataset import ManageDataSet
 
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -49,9 +49,8 @@ trainer = GPTTrainer(
 )
 
 # Dataset management
-chess_dataset = DataSet(
+chess_dataset = ManageDataSet(
     model_config=model_config,
-    train_config=trainer,
     dataset_dir='./dataset',
 )
 

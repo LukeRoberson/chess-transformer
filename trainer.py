@@ -5,7 +5,7 @@ This is kept separate from the model class, as the model can be used
 '''
 
 from transformer_blocks import GPTConfig, GPTLanguageModel
-from dataset import DataSet
+from dataset import ManageDataSet
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.cuda.amp import autocast, GradScaler
@@ -88,7 +88,7 @@ class GPTTrainer():
     def train(
         self,
         model: GPTLanguageModel,
-        dataset: DataSet,
+        dataset: ManageDataSet,
         optimizer: torch.optim.Optimizer,
         scheduler: CosineAnnealingWarmRestarts,
         scaler: GradScaler,
@@ -164,7 +164,7 @@ class GPTTrainer():
             for batch_idx, batch in enumerate(
                 tqdm(
                     dataset.data_iter('train'),
-                    total=len(dataset.train_data) // self.batch_size,
+                    total=dataset.train_data_size // self.batch_size,
                     colour='yellow',
                 )
             ):
@@ -197,7 +197,7 @@ class GPTTrainer():
                     scaler.update()
 
                     # Update the scheduler
-                    scheduler.step(epoch + batch_idx / len(dataset.train_data))
+                    scheduler.step(epoch + batch_idx / dataset.train_data_size)
 
             # Evaluate every full epoch
             losses = self.estimate_loss(
@@ -225,7 +225,7 @@ class GPTTrainer():
     @torch.no_grad()
     def estimate_loss(
         self,
-        dataset: DataSet,
+        dataset: ManageDataSet,
         model: GPTLanguageModel,
     ) -> dict:
         '''
