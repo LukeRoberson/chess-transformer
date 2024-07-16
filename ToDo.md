@@ -8,9 +8,6 @@
 * Resume training option
 * Checkpoint save filename
 
-## Tokenizer
-* Found some tokens with an '@' symbol (unsure why?)
-
 ## Transformer
 * Save model architecture (to handle dynamic block sizes based on game limit)
 * Append epoch number to model filenames
@@ -21,8 +18,15 @@
 * Add temperature
 
 ## Dataset
-* Train on a percentage of the dataset per epoch
-    * Recreate the dataset with random files each time
+* Consolidate the two get_batch() methods down to one
+* Add 'num_workers' to improve dataloader creation
+* Consider python.futures to load files in parallel
+* Can we add garbage collection to free up memory?
+* When creating test/train splits, consider list comprehensions for performance
+
+# Tokenizer
+* Add support for parallel processing when tokenizing strings
+* Can games be tokenized in batches?
 
 # Testing
 * See if a different activation function in the FFN has an effect
@@ -31,3 +35,6 @@
 # Wishlist
 * See if it's possible to include JSON data in the checkpoint (for tokenizer)
 * Separate forward pass from the loss?
+* Can we use data augmentation to improve the dataset?
+* During finetuning, can we add annotations to explain moves?
+* YAML file for configuration

@@ -24,11 +24,11 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=64,
+    batch_size=16,
     block_size=192,
-    n_embd=256,
-    n_head=2,
-    n_layer=2,
+    n_embd=768,
+    n_head=12,
+    n_layer=12,
     dropout=0.2,
     pad_token=tokenizer.pad_number,
 )
@@ -51,7 +51,7 @@ trainer = GPTTrainer(
 # Dataset management
 chess_dataset = ManageDataSet(
     model_config=model_config,
-    dataset_dir='./dataset',
+    dataset_dir='../pgn_scraper/dumps',
 )
 
 # Create the model
@@ -87,6 +87,7 @@ trainer.train(
     scheduler=scheduler,
     scaler=scaler,
     resume=False,
+    percent=0.05,
     checkpoint='model.pth',
 )
 

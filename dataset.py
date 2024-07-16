@@ -1,5 +1,12 @@
 '''
-The class for managing the dataset
+The classes for creating and managing the datasets
+
+CreateDataSet:
+    Creates dataloaders for training and testing sets
+
+ManageDataSet:
+    Manages the dataloaders for the model
+    Includes getting batches, and chunking the raw data
 '''
 
 import torch
@@ -12,9 +19,10 @@ import os
 import re
 import json
 from tqdm import tqdm
-import traceback
+import random
 
 from typing import Tuple, Generator
+import traceback
 
 
 class CreateDataSet():
@@ -189,7 +197,11 @@ class CreateDataSet():
 
         # Loop through each JSON file and extract the games
         game_list = []
-        for file in tqdm(self.file_list):
+        for file in tqdm(
+            self.file_list,
+            desc='Reading files',
+            colour='blue',
+        ):
             # Load the JSON file
             with open(file, "r") as f:
                 game_file = json.load(f)
@@ -228,7 +240,11 @@ class CreateDataSet():
 
         # Loop through each game and preprocess it
         processed_games = []
-        for game in game_list:
+        for game in tqdm(
+            game_list,
+            desc='Preprocessing games',
+            colour='cyan'
+        ):
             # Remove move numbers from the PGN
             game = re.sub(r"\d{1,3}\. ", "", game).strip()
 
@@ -286,7 +302,10 @@ class CreateDataSet():
 
         # Get input and target sequences
         #   Target is input shifted right by one token
-        for game in processed_games:
+        for game in tqdm(
+            processed_games,
+            desc='Creating sequences',
+        ):
             input_sequences.append(game[:-1])
             target_sequences.append(game[1:])
 
@@ -330,10 +349,13 @@ class CreateDataSet():
         '''
 
         # Create TensorDatasets for the training and testing sets
+        print("Creating Training TensorDataset")
         train_dataset = TensorDataset(
             torch.tensor(train_data),
             torch.tensor(train_labels)
         )
+
+        print("Creating Test TensorDataset")
         test_dataset = TensorDataset(
             torch.tensor(test_data),
             torch.tensor(test_labels)
@@ -341,12 +363,15 @@ class CreateDataSet():
 
         # Create DataLoader objects for the training and testing sets
         #   Pin memory to speed up data transfer to the GPU
+        print("Creating Train DataLoader")
         self.train_dataloader = DataLoader(
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
         )
+
+        print("Creating Test DataLoader")
         self.test_dataloader = DataLoader(
             test_dataset,
             batch_size=self.batch_size,
@@ -410,14 +435,52 @@ class ManageDataSet():
         self.data_loader_iter = None
 
         # Get a list of all files in the dataset directory
-        file_list = []
+        self.original_file_list = []
         for file in tqdm(
             os.listdir(self.dataset_dir),
             desc='Collecting JSON files'
         ):
             if file.endswith('.json'):
                 # Add to file list
-                file_list.append(f"{self.dataset_dir}/{file}")
+                self.original_file_list.append(f"{self.dataset_dir}/{file}")
+
+        # File list is shuffled to help prevent overfitting
+        random.shuffle(self.original_file_list)
+
+        # Create a copy of the original file list that we can edit
+        self.files_remaining = self.original_file_list.copy()
+
+    def get_dataset(
+        self,
+        percentage: float = 1.0,
+    ) -> None:
+
+        # Handle the case where the percentage is invalid
+        if percentage > 1.0:
+            percentage = 1.0
+        elif percentage < 0.0:
+            percentage = 1.0
+
+        # If there are no files left, return None
+        if len(self.files_remaining) == 0:
+            # Reset the files remaining to the original list
+            self.files_remaining = self.original_file_list.copy()
+            random.shuffle(self.files_remaining)
+
+            return None
+
+        # Get the number of files to use
+        file_count = len(self.original_file_list) * percentage
+
+        # Get the files to use, and remove them from the remaining list
+        file_list = []
+        for _ in range(int(file_count)):
+            # Handle the case where there are no files left
+            if not self.files_remaining:
+                break
+
+            # Remove and return the first element
+            file_list.append(self.files_remaining.pop(0))
 
         # Create a dataset using the context manager
         with CreateDataSet(

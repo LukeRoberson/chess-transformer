@@ -13,6 +13,7 @@ from torch.cuda import Stream
 
 from tqdm import tqdm
 from colorama import Fore, Style
+import math
 
 
 class GPTTrainer():
@@ -92,6 +93,7 @@ class GPTTrainer():
         optimizer: torch.optim.Optimizer,
         scheduler: CosineAnnealingWarmRestarts,
         scaler: GradScaler,
+        percent: float = 1.0,
         resume: bool = False,
         checkpoint: str = 'model.pth',
     ) -> None:
@@ -101,6 +103,10 @@ class GPTTrainer():
         Supports resuming training from a checkpoint
             To resume, set resume=True and provide the checkpoint path
             This will pick up at the next epoch
+
+        Chunking is supported by setting the percentage of the dataset to use
+            This is useful for large datasets where the entire dataset
+                cannot be loaded at once
 
         Args:
             model: GPTLanguageModel
@@ -113,6 +119,8 @@ class GPTTrainer():
                 The scheduler to use for training
             scaler: GradScaler
                 The scaler to use for mixed precision training
+            percent: float
+                The size of the dataset to use in each chunk
             resume: bool
                 Whether to resume training from a checkpoint
             checkpoint: str
@@ -156,48 +164,68 @@ class GPTTrainer():
             print("Training complete!")
             return
 
+        # The main training loop
         for epoch_num in range(epoch, self.epochs):
-            print(f"Epoch {epoch_num + 1} of {self.epochs}")
+            print(f"\n\nEpoch {epoch_num + 1} of {self.epochs}")
 
-            # Steps (batch loop) batches within an epoch
-            model.train()
-            for batch_idx, batch in enumerate(
-                tqdm(
-                    dataset.data_iter('train'),
-                    total=dataset.train_data_size // self.batch_size,
-                    colour='yellow',
+            # Chunking - Loop over chunks per epoch
+            for chunk in range(math.ceil(1.0 / percent)):
+                print(
+                    Fore.BLUE,
+                    f"Loading chunk {chunk + 1} of {math.ceil(1.0 / percent)}",
+                    Style.RESET_ALL
                 )
-            ):
-                optimizer.zero_grad(set_to_none=True)
+                dataset.get_dataset(percentage=percent)
 
-                # Scheduler Warmup Phase
-                if epoch_num < self.warmup_steps:
-                    lr = self.learning_rate * (epoch_num / self.warmup_steps)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr
-                else:
-                    # After warmup, adjust learning rate based on scheduler
-                    scheduler.step(epoch_num - self.warmup_steps)
+                # Steps (batch loop) batches within an epoch
+                model.train()
+                print(
+                    Fore.YELLOW,
+                    "\nTraining",
+                    Style.RESET_ALL
+                )
+                for batch_idx, batch in enumerate(
+                    tqdm(
+                        dataset.data_iter('train'),
+                        total=dataset.train_data_size // self.batch_size,
+                        colour='yellow',
+                        desc="Training batches",
+                    )
+                ):
+                    optimizer.zero_grad(set_to_none=True)
 
-                # Move to GPU, using CUDA streams for faster data transfer
-                xb, yb = batch
-                with torch.cuda.stream(data_stream):
-                    xb = xb.to(self.device, non_blocking=True)
-                    yb = yb.to(self.device, non_blocking=True)
+                    # Scheduler Warmup Phase
+                    if epoch_num < self.warmup_steps:
+                        lr = self.learning_rate * (
+                            epoch_num / self.warmup_steps
+                        )
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr
+                    else:
+                        # After warmup, adjust learning rate based on scheduler
+                        scheduler.step(epoch_num - self.warmup_steps)
 
-                # Forward pass and backpropagation, using CUDA streams
-                with torch.cuda.stream(comp_stream):
-                    # Forward pass
-                    with autocast():
-                        _, loss = model(xb, yb)
+                    # Move to GPU, using CUDA streams for faster data transfer
+                    xb, yb = batch
+                    with torch.cuda.stream(data_stream):
+                        xb = xb.to(self.device, non_blocking=True)
+                        yb = yb.to(self.device, non_blocking=True)
 
-                    # Mixed precision backpropagation
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    # Forward pass and backpropagation, using CUDA streams
+                    with torch.cuda.stream(comp_stream):
+                        # Forward pass
+                        with autocast():
+                            _, loss = model(xb, yb)
 
-                    # Update the scheduler
-                    scheduler.step(epoch + batch_idx / dataset.train_data_size)
+                        # Mixed precision backpropagation
+                        scaler.scale(loss).backward()
+                        scaler.step(optimizer)
+                        scaler.update()
+
+                        # Update the scheduler
+                        scheduler.step(
+                            epoch + batch_idx / dataset.train_data_size
+                        )
 
             # Evaluate every full epoch
             losses = self.estimate_loss(
