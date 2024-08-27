@@ -164,30 +164,31 @@ class GPTTrainer():
             print("Training complete!")
             return
 
+        # Start loading the data in a separate thread
+        dataset.start_data_loading(percentage=percent)
+
         # The main training loop
         for epoch_num in range(epoch, self.epochs):
             print(f"\n\nEpoch {epoch_num + 1} of {self.epochs}")
 
             # Chunking - Loop over chunks per epoch
             for chunk in range(math.ceil(1.0 / percent)):
-                print(
-                    Fore.BLUE,
-                    f"Loading chunk {chunk + 1} of {math.ceil(1.0 / percent)}",
-                    Style.RESET_ALL
+                # Fetch the next chunk from the queue
+                train_dataloader, _, train_data_size, _ = (
+                    dataset.data_queue.get()
                 )
-                dataset.get_dataset(percentage=percent)
 
                 # Steps (batch loop) batches within an epoch
                 model.train()
                 print(
                     Fore.YELLOW,
-                    "\nTraining",
+                    f"\nChunk {chunk + 1} of {math.ceil(1.0 / percent)}",
                     Style.RESET_ALL
                 )
                 for batch_idx, batch in enumerate(
                     tqdm(
-                        dataset.data_iter('train'),
-                        total=dataset.train_data_size // self.batch_size,
+                        train_dataloader,
+                        total=train_data_size // self.batch_size,
                         colour='yellow',
                         desc="Training batches",
                     )
@@ -227,20 +228,22 @@ class GPTTrainer():
                             epoch + batch_idx / dataset.train_data_size
                         )
 
-            # Evaluate every full epoch
-            losses = self.estimate_loss(
-                dataset=dataset,
-                model=model,
-            )
-            loss_history[epoch_num] = losses
+                # Evaluate every chunk
+                losses = self.estimate_loss(
+                    dataset=dataset,
+                    model=model,
+                )
 
-            print(
-                Fore.GREEN,
-                f"Epoch #{epoch + 1} results: "
-                f"training loss {losses['train']:.4f}, "
-                f"validation loss {losses['val']:.4f}",
-                Style.RESET_ALL
-            )
+                print(
+                    Fore.GREEN,
+                    f"Epoch #{epoch + 1} results: "
+                    f"training loss {losses['train']:.4f}, "
+                    f"validation loss {losses['val']:.4f}",
+                    Style.RESET_ALL
+                )
+
+            # Store the losses in the history every epoch
+            loss_history[epoch_num] = losses
 
             # Save the model
             model.save_checkpoint(
@@ -249,6 +252,9 @@ class GPTTrainer():
                 epoch=epoch_num,
                 loss_history=loss_history,
             )
+
+        # End of chunk loop, stop the thread
+        dataset.stop_data_loading()
 
     @torch.no_grad()
     def estimate_loss(

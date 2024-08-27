@@ -16,6 +16,10 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.cuda.amp import GradScaler
 
 
+# DATASET = '../pgn_scraper/dumps'
+DATASET = './dataset'
+
+
 # Set up the tokenizer
 tokenizer = ChessTokenizer()
 tokenizer.load()
@@ -26,9 +30,9 @@ model_config = GPTConfig(
     tokenizer=tokenizer,
     batch_size=16,
     block_size=192,
-    n_embd=768,
-    n_head=12,
-    n_layer=12,
+    n_embd=128,
+    n_head=2,
+    n_layer=2,
     dropout=0.2,
     pad_token=tokenizer.pad_number,
 )
@@ -51,7 +55,7 @@ trainer = GPTTrainer(
 # Dataset management
 chess_dataset = ManageDataSet(
     model_config=model_config,
-    dataset_dir='../pgn_scraper/dumps',
+    dataset_dir=DATASET,
 )
 
 # Create the model
@@ -87,7 +91,7 @@ trainer.train(
     scheduler=scheduler,
     scaler=scaler,
     resume=False,
-    percent=0.05,
+    percent=0.25,
     checkpoint='model.pth',
 )
 
