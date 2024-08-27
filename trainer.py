@@ -8,7 +8,7 @@ from transformer_blocks import GPTConfig, GPTLanguageModel
 from dataset import ManageDataSet
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from torch.cuda import Stream
 
 from tqdm import tqdm
@@ -215,7 +215,7 @@ class GPTTrainer():
                     # Forward pass and backpropagation, using CUDA streams
                     with torch.cuda.stream(comp_stream):
                         # Forward pass
-                        with autocast():
+                        with autocast('cuda'):
                             _, loss = model(xb, yb)
 
                         # Mixed precision backpropagation

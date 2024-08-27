@@ -13,11 +13,10 @@ from dataset import ManageDataSet
 
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 
 
-# DATASET = '../pgn_scraper/dumps'
-DATASET = './dataset'
+DATASET = '../../pgn-dataset'
 
 
 # Set up the tokenizer
@@ -28,11 +27,11 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=16,
+    batch_size=128,
     block_size=192,
-    n_embd=128,
-    n_head=2,
-    n_layer=2,
+    n_embd=768,
+    n_head=12,
+    n_layer=12,
     dropout=0.2,
     pad_token=tokenizer.pad_number,
 )
@@ -81,7 +80,7 @@ scheduler = CosineAnnealingWarmRestarts(
 )
 
 # Initialise the scaler
-scaler = GradScaler()
+scaler = GradScaler('cuda')
 
 # Training loop (epoch loop, full dataset)
 trainer.train(
