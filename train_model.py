@@ -10,13 +10,15 @@ from transformer_blocks import GPTConfig
 from trainer import GPTTrainer
 from tokenizer import ChessTokenizer
 from dataset import ManageDataSet
+from config import Config
 
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import GradScaler
 
 
-DATASET = '../../pgn-dataset'
+# Read the configuration file
+settings = Config(config_file='config.yaml')
 
 
 # Set up the tokenizer
@@ -27,34 +29,34 @@ tokenizer.load()
 model_config = GPTConfig(
     device='cuda' if torch.cuda.is_available() else 'cpu',
     tokenizer=tokenizer,
-    batch_size=128,
-    block_size=192,
-    n_embd=768,
-    n_head=12,
-    n_layer=12,
-    dropout=0.2,
+    batch_size=settings.dataset['batch_size'],
+    block_size=settings.model['block_size'],
+    n_embd=settings.model['embedding_size'],
+    n_head=settings.model['heads'],
+    n_layer=settings.model['layers'],
+    dropout=settings.regularization['dropout'],
     pad_token=tokenizer.pad_number,
 )
 print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
-    epochs=2,
-    learning_rate=2e-4,
-    warmup_steps=10,
-    test_split=0.2,
+    epochs=settings.training['epochs'],
+    learning_rate=settings.training['learning_rate'],
+    warmup_steps=settings.training['warmup_steps'],
+    test_split=settings.dataset['test_split'],
     model_config=model_config,
-    eval_iterations=50,
-    weight_decay=0.01,
-    sched_first_cycle=10,
-    sched_cycle_factor=2,
-    sched_min_lr=1e-6,
+    eval_iterations=settings.training['eval_iterations'],
+    weight_decay=settings.regularization['weight_decay'],
+    sched_first_cycle=settings.scheduler['first_cycle'],
+    sched_cycle_factor=settings.scheduler['cycle_factor'],
+    sched_min_lr=settings.scheduler['min_lr'],
 )
 
 # Dataset management
 chess_dataset = ManageDataSet(
     model_config=model_config,
-    dataset_dir=DATASET,
+    dataset_dir=settings.dataset['path'],
 )
 
 # Create the model
@@ -80,7 +82,7 @@ scheduler = CosineAnnealingWarmRestarts(
 )
 
 # Initialise the scaler
-scaler = GradScaler('cuda')
+scaler = GradScaler('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Training loop (epoch loop, full dataset)
 trainer.train(
@@ -89,9 +91,9 @@ trainer.train(
     optimizer=optimizer,
     scheduler=scheduler,
     scaler=scaler,
-    resume=False,
-    percent=0.25,
-    checkpoint='model.pth',
+    resume=settings.training['resume'],
+    percent=settings.dataset['chunk_percent'],
+    checkpoint=settings.training['checkpoint'],
 )
 
 # Generate a sequence of tokens from scratch

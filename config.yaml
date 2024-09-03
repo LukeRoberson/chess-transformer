@@ -1,0 +1,28 @@
+dataset:
+  path: ./dataset
+  batch_size: 128
+  test_split: 0.2
+  chunk_percent: 0.1
+
+model:
+  block_size: 192
+  embedding_size: 768
+  heads: 12
+  layers: 12
+
+regularization:
+  dropout: 0.1
+  weight_decay: 0.01
+
+train:
+  epochs: 2
+  learning_rate: 0.0002
+  warmup_steps: 10
+  eval_iterations: 50
+  checkpoint: model.pth
+  resume: False
+
+scheduler:
+  first_cycle: 10
+  cycle_factor: 2
+  min_lr: 0.000001
