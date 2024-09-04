@@ -1,0 +1,20 @@
+Wed Sep  4 16:17:04 2024    ./tools/profile_output
+
+         5119719 function calls (5119588 primitive calls) in 37.057 seconds
+
+   Ordered by: cumulative time
+   List reduced from 371 to 10 due to restriction <10>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      6/5    3.766    0.628   77.164   15.433 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.1520.0_x64__qbz5n2kfra8p0\Lib\threading.py:637(wait)
+      3/1    0.000    0.000   37.056   37.056 {built-in method builtins.exec}
+      2/1    0.000    0.000   37.056   37.056 <string>:1(<module>)
+      2/1    0.000    0.000   37.056   37.056 c:\Users\lrobertson\OneDrive - lakemac.nsw.gov.au\Documents\chess-transformer\tools\dataset_perf.py:21(train)
+        1    0.000    0.000   37.056   37.056 c:\Users\lrobertson\OneDrive - lakemac.nsw.gov.au\Documents\chess-transformer\dataset.py:532(stop_data_loading)
+        1    0.000    0.000   37.056   37.056 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.1520.0_x64__qbz5n2kfra8p0\Lib\threading.py:1117(join)
+        1    0.000    0.000   37.056   37.056 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.1520.0_x64__qbz5n2kfra8p0\Lib\threading.py:1155(_wait_for_tstate_lock)
+        1    0.000    0.000   36.052   36.052 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.1520.0_x64__qbz5n2kfra8p0\Lib\queue.py:154(get)
+   370790    0.901    0.000   10.945    0.000 c:\Users\lrobertson\OneDrive - lakemac.nsw.gov.au\Documents\chess-transformer\dataset.py:198(_load_games)
+        1    0.000    0.000    5.994    5.994 c:\Users\lrobertson\OneDrive - lakemac.nsw.gov.au\Documents\chess-transformer\dataset.py:396(get_dataset)
+
+
