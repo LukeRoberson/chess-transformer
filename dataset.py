@@ -11,7 +11,6 @@ ManageDataSet:
 
 import torch
 from torch.utils.data import TensorDataset, DataLoader
-from sklearn.model_selection import train_test_split
 from transformer_blocks import GPTConfig
 from tokenizer import ChessTokenizer
 
@@ -95,35 +94,31 @@ class CreateDataSet():
 
         # Initialize the dataloaders
         self.train_dataloader = None
-        self.test_dataloader = None
         self.train_data_size = None
-        self.test_data_size = None
 
         # Track the number of skipped games
         self.skipped_games = 0
 
     def __enter__(
         self
-    ) -> Tuple[DataLoader, DataLoader, int, int]:
+    ) -> Tuple[DataLoader, int]:
         '''
         Context manager for the dataset
         This is the main flow of the dataset creation
 
         Returns:
             Tuple[DataLoader, DataLoader, int, int]
-                The training and testing dataloaders
-                The sizes of the training and testing sets
+                The training dataloader
+                The size of the training set
         '''
 
         # Create the dataset and dataloaders
-        self._build_dataset(split=0.2)
+        self._build_dataset()
 
         # Return the dataloaders and the sizes of the training and testing sets
         return (
             self.train_dataloader,
-            self.test_dataloader,
             self.train_data_size,
-            self.test_data_size
         )
 
     def __exit__(
@@ -243,7 +238,6 @@ class CreateDataSet():
 
     def _build_dataset(
         self,
-        split: float = 0.2,
     ) -> None:
         '''
         Build the dataset
@@ -256,10 +250,6 @@ class CreateDataSet():
 
         Uses numpy arrays for memory efficiency
         Adds manual garbage collection to help with memory management
-
-        Args:
-            split: float
-                The percentage size of the test set
         '''
 
         np_array = np.empty((0, self.block_size), dtype=object)
@@ -288,19 +278,11 @@ class CreateDataSet():
                 )
 
         # Create input and target sequences
-        input_sequences = np_array[:, :-1]
-        target_sequences = np_array[:, 1:]
-
-        # Split the data into training and testing sets
-        train_data, test_data, train_labels, test_labels = train_test_split(
-            input_sequences,
-            target_sequences,
-            test_size=split,
-        )
+        train_data = np_array[:, :-1]
+        train_labels = np_array[:, 1:]
 
         # Get the sizes of the training and testing sets
         self.train_data_size = len(train_data)
-        self.test_data_size = len(test_data)
 
         # Create TensorDatasets for the training and testing sets
         train_dataset = TensorDataset(
@@ -311,28 +293,12 @@ class CreateDataSet():
         del train_labels
         gc.collect()
 
-        test_dataset = TensorDataset(
-            torch.tensor(test_data),
-            torch.tensor(test_labels)
-        )
-        del test_data
-        del test_labels
-        gc.collect()
-
         # Create DataLoader objects for the training and testing sets
         #   Pin memory to speed up data transfer to the GPU
         self.train_dataloader = DataLoader(
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            pin_memory=True,
-        )
-        gc.collect()
-
-        self.test_dataloader = DataLoader(
-            test_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
             pin_memory=True,
         )
         gc.collect()
@@ -410,17 +376,22 @@ class ManageDataSet():
         self.data_loader_iter = None
 
         # Get a list of all files in the dataset directory
-        self.original_file_list = []
+        original_file_list = []
         for file in os.listdir(self.dataset_dir):
             if file.endswith('.json'):
                 # Add to file list
-                self.original_file_list.append(f"{self.dataset_dir}/{file}")
+                original_file_list.append(f"{self.dataset_dir}/{file}")
 
         # File list is shuffled to help prevent overfitting
-        random.shuffle(self.original_file_list)
+        random.shuffle(original_file_list)
+
+        # Get 10% of the files
+        num_files = int(len(original_file_list) * 0.1)
+        self.eval_list = original_file_list[:num_files]
+        self.train_list = original_file_list[num_files:]
 
         # Create a copy of the original file list that we can edit
-        self.files_remaining = self.original_file_list.copy()
+        self.files_remaining = self.train_list.copy()
 
         # Setup threading
         self.data_queue = queue.Queue(maxsize=1)
@@ -454,15 +425,15 @@ class ManageDataSet():
         elif percentage <= 0.0:
             percentage = 1.0
 
-        # If there are no files left, return None
+        # If there are no files left, evaluate model and return None
         if len(self.files_remaining) == 0:
             # Reset the files remaining to the original list
-            self.files_remaining = self.original_file_list.copy()
+            self.files_remaining = self.train_list.copy()
             random.shuffle(self.files_remaining)
             return None
 
         # Get the number of files to use
-        file_count = len(self.original_file_list) * percentage
+        file_count = len(self.train_list) * percentage
 
         # Get the files to use, and remove them from the remaining list
         file_list = []
@@ -481,10 +452,31 @@ class ManageDataSet():
             tokenizer=self.tokenizer,
             min_length=6,
             block_size=192,
-        ) as (train_dataset, test_dataset, train_size, test_size):
+        ) as (train_dataset, train_size):
             self.train_dataloader = train_dataset
-            self.test_dataloader = test_dataset
             self.train_data_size = train_size
+
+    def get_test_dataset(
+        self,
+    ):
+        '''
+        Get the test dataset for the model
+
+        This is separate to the training dataset,
+            as the training set is chunked.
+        This means we can evaluate the model on a test set
+            after the chunks are processed
+        '''
+
+        # Create the dataset as normal
+        with CreateDataSet(
+            file_list=self.eval_list,
+            batch_size=self.model_config.batch_size,
+            tokenizer=self.tokenizer,
+            min_length=6,
+            block_size=192,
+        ) as (test_dataset, test_size):
+            self.test_dataloader = test_dataset
             self.test_data_size = test_size
 
     def data_loader_thread(
@@ -514,9 +506,7 @@ class ManageDataSet():
                 self.data_queue.put(
                     (
                         self.train_dataloader,
-                        self.test_dataloader,
                         self.train_data_size,
-                        self.test_data_size
                     )
                 )
 

@@ -6,6 +6,8 @@ This is kept separate from the model class, as the model can be used
 
 from transformer_blocks import GPTConfig, GPTLanguageModel
 from dataset import ManageDataSet
+from tokenizer import ChessTokenizer
+
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import autocast, GradScaler
@@ -94,6 +96,7 @@ class GPTTrainer():
         optimizer: torch.optim.Optimizer,
         scheduler: CosineAnnealingWarmRestarts,
         scaler: GradScaler,
+        tokenizer: ChessTokenizer,
         percent: float = 1.0,
         resume: bool = False,
         checkpoint: str = 'model.pth',
@@ -178,7 +181,7 @@ class GPTTrainer():
                 chunk_start_time = time.time()
 
                 # Fetch the next chunk from the queue
-                train_dataloader, _, train_data_size, _ = (
+                train_dataloader, train_data_size = (
                     dataset.data_queue.get()
                 )
 
@@ -239,19 +242,22 @@ class GPTTrainer():
                     Style.RESET_ALL
                 )
 
-                # Evaluate every chunk
-                losses = self.estimate_loss(
-                    dataset=dataset,
-                    model=model,
-                )
+            # Create an evaluation dataset
+            dataset.get_test_dataset()
 
-                print(
-                    Fore.GREEN,
-                    f"Epoch #{epoch + 1} results: "
-                    f"training loss {losses['train']:.4f}, "
-                    f"validation loss {losses['val']:.4f}",
-                    Style.RESET_ALL
-                )
+            # Evaluate the model on the test dataset
+            losses = self.estimate_loss(
+                dataset=dataset,
+                model=model,
+            )
+
+            print(
+                Fore.GREEN,
+                f"Epoch #{epoch + 1} results: "
+                f"training loss {losses['train']:.4f}, "
+                f"validation loss {losses['val']:.4f}",
+                Style.RESET_ALL
+            )
 
             # Store the losses in the history every epoch
             loss_history[epoch_num] = losses
@@ -265,14 +271,24 @@ class GPTTrainer():
             )
 
             # Print the time taken for the epoch
+            seconds = time.time() - epoch_start_time
+            minutes = seconds // 60
+            seconds = seconds % 60
             print(
                 Fore.YELLOW,
-                f"Epoch {epoch_num + 1} took ",
-                f"{time.time() - epoch_start_time:.2f} seconds",
+                f"Epoch {epoch_num + 1} duration: ",
+                f"{minutes:.0f}:{seconds:.0f}",
                 Style.RESET_ALL
             )
 
-        # End of chunk loop, stop the thread
+            # Generate a sample from the model
+            sequence = model.generate(
+                context=None,
+                max_new_tokens=50
+            )[0].tolist()
+            print(tokenizer.detokenize(sequence))
+
+        # End of loop, stop the thread
         dataset.stop_data_loading()
 
     @torch.no_grad()

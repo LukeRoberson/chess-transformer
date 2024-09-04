@@ -1,13 +1,13 @@
 dataset:
   path: ./dataset
   batch_size: 64
-  test_split: 0.2
+  test_split: 0.1
   chunk_percent: 0.1
 
 model:
   block_size: 192
   embedding_size: 256
-  heads: 3
+  heads: 2
   layers: 2
 
 regularization:

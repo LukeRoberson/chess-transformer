@@ -193,13 +193,11 @@ trainer.train(
     optimizer=optimizer,
     scheduler=scheduler,
     scaler=scaler,
+    tokenizer=tokenizer,
     resume=settings.training['resume'],
     percent=settings.dataset['chunk_percent'],
     checkpoint=settings.training['checkpoint'],
 )
 
-# Generate a sequence of tokens from scratch
-sequence = model.generate(context=None, max_new_tokens=50)[0].tolist()
-
-# Detokenize the sequence and print it
-print(tokenizer.detokenize(sequence))
+print(Fore.GREEN, "Training complete")
+print(Style.RESET_ALL)
