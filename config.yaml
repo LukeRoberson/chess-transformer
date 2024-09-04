@@ -1,17 +1,17 @@
 dataset:
   path: ./dataset
-  batch_size: 128
+  batch_size: 64
   test_split: 0.2
   chunk_percent: 0.1
 
 model:
   block_size: 192
-  embedding_size: 768
-  heads: 12
-  layers: 12
+  embedding_size: 256
+  heads: 3
+  layers: 2
 
 regularization:
-  dropout: 0.1
+  dropout: 0.2
   weight_decay: 0.01
 
 train:

@@ -15,6 +15,7 @@ from config import Config
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import GradScaler
+from colorama import Fore, Style
 
 
 # Read the configuration file
@@ -37,7 +38,6 @@ model_config = GPTConfig(
     dropout=settings.regularization['dropout'],
     pad_token=tokenizer.pad_number,
 )
-print(f'using device: {model_config.device}')
 
 # Set up the GPTTrainer
 trainer = GPTTrainer(
@@ -64,7 +64,7 @@ model = GPTLanguageModel(
     config=model_config,
     vocab_size=len(tokenizer),
 ).to(model_config.device)
-print(f'{model.param_count/1e6}M parameters')
+
 
 # Create a PyTorch optimizer
 optimizer = torch.optim.AdamW(
@@ -83,6 +83,108 @@ scheduler = CosineAnnealingWarmRestarts(
 
 # Initialise the scaler
 scaler = GradScaler('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Print the model configuration
+print(
+    Fore.YELLOW, "----------------------------------------------------"
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Parameter",
+    Fore.YELLOW, "        | ",
+    Fore.GREEN, "Value"
+)
+print(
+    Fore.YELLOW, "----------------------------------------------------"
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Device",
+    Fore.YELLOW, "           | ",
+    Fore.GREEN, model_config.device
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Batch size",
+    Fore.YELLOW, "       | ",
+    Fore.GREEN, model_config.batch_size
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Block size",
+    Fore.YELLOW, "       | ",
+    Fore.GREEN, model_config.block_size
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Embedding size",
+    Fore.YELLOW, "   | ",
+    Fore.GREEN, model_config.n_embd
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Heads",
+    Fore.YELLOW, "            | ",
+    Fore.GREEN, model_config.n_head
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Layers",
+    Fore.YELLOW, "           | ",
+    Fore.GREEN, model_config.n_layer
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Dropout",
+    Fore.YELLOW, "          | ",
+    Fore.GREEN, model_config.dropout
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Weight decay",
+    Fore.YELLOW, "     | ",
+    Fore.GREEN, trainer.weight_decay
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Learning rate",
+    Fore.YELLOW, "    | ",
+    Fore.GREEN, trainer.learning_rate
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Warmup steps",
+    Fore.YELLOW, "     | ",
+    Fore.GREEN, trainer.warmup_steps
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "First cycle",
+    Fore.YELLOW, "      | ",
+    Fore.GREEN, trainer.sched_first_cycle
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Cycle factor",
+    Fore.YELLOW, "     | ",
+    Fore.GREEN, trainer.sched_cycle_factor
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Min LR",
+    Fore.YELLOW, "           | ",
+    Fore.GREEN, trainer.sched_min_lr
+)
+print(
+    Fore.YELLOW, "| ",
+    Fore.GREEN, "Total Parameters",
+    Fore.YELLOW, " | ",
+    Fore.GREEN, f'{model.param_count/1e6}M parameters'
+)
+print(
+    Fore.YELLOW, "----------------------------------------------------")
+print(Style.RESET_ALL)
+
 
 # Training loop (epoch loop, full dataset)
 trainer.train(

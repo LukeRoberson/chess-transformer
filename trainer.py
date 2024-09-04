@@ -14,6 +14,7 @@ from torch.cuda import Stream
 from tqdm import tqdm
 from colorama import Fore, Style
 import math
+import time
 
 
 class GPTTrainer():
@@ -169,10 +170,13 @@ class GPTTrainer():
 
         # The main training loop
         for epoch_num in range(epoch, self.epochs):
+            epoch_start_time = time.time()
             print(f"\n\nEpoch {epoch_num + 1} of {self.epochs}")
 
             # Chunking - Loop over chunks per epoch
             for chunk in range(math.ceil(1.0 / percent)):
+                chunk_start_time = time.time()
+
                 # Fetch the next chunk from the queue
                 train_dataloader, _, train_data_size, _ = (
                     dataset.data_queue.get()
@@ -191,6 +195,7 @@ class GPTTrainer():
                         total=train_data_size // self.batch_size,
                         colour='yellow',
                         desc="Training batches",
+                        leave=False,
                     )
                 ):
                     optimizer.zero_grad(set_to_none=True)
@@ -228,6 +233,12 @@ class GPTTrainer():
                             epoch + batch_idx / dataset.train_data_size
                         )
 
+                print(
+                    Fore.YELLOW,
+                    f" Training time: {time.time() - chunk_start_time:.1f}s",
+                    Style.RESET_ALL
+                )
+
                 # Evaluate every chunk
                 losses = self.estimate_loss(
                     dataset=dataset,
@@ -251,6 +262,14 @@ class GPTTrainer():
                 scheduler=scheduler,
                 epoch=epoch_num,
                 loss_history=loss_history,
+            )
+
+            # Print the time taken for the epoch
+            print(
+                Fore.YELLOW,
+                f"Epoch {epoch_num + 1} took ",
+                f"{time.time() - epoch_start_time:.2f} seconds",
+                Style.RESET_ALL
             )
 
         # End of chunk loop, stop the thread
@@ -291,6 +310,7 @@ class GPTTrainer():
                 range(self.eval_iterations),
                 desc=f"Estimating {split} loss",
                 colour='green',
+                leave=False,
             ):
                 # Get a batch of data
                 X, Y = dataset.get_batch(split)

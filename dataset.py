@@ -267,8 +267,10 @@ class CreateDataSet():
         # Get games by year
         for year in tqdm(
             self._load_files(self.file_list),
-            desc='Loading dataset',
-            total=len(self.file_list)
+            desc='Pre-loading dataset',
+            total=len(self.file_list),
+            colour='cyan',
+            leave=False,
         ):
             all_games = []
 
