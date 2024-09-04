@@ -25,7 +25,7 @@ import threading
 import queue
 import time
 
-from typing import Tuple, Generator
+from typing import Tuple, Generator, List
 import traceback
 
 
@@ -64,6 +64,7 @@ class CreateDataSet():
         tokenizer: ChessTokenizer,
         min_length: int = 6,
         block_size: int = 192,
+        num_workers: int = 4,
     ) -> None:
         '''
         Constructor
@@ -83,6 +84,11 @@ class CreateDataSet():
                 The block size for the model
                 Also the maximum length of a game in tokens
         '''
+
+        # Setup threading and events
+        self.load_queue = queue.Queue()
+        self.load_stop_event = threading.Event()
+        self.num_workers = num_workers
 
         # Setup the values for the dataset
         self.file_list = file_list
@@ -113,6 +119,7 @@ class CreateDataSet():
         '''
 
         # Create the dataset and dataloaders
+        self.start_loading(self.file_list)
         self._build_dataset()
 
         # Return the dataloaders and the sizes of the training and testing sets
@@ -180,24 +187,84 @@ class CreateDataSet():
             year = list(contents.keys())[0]
             return contents[year]
 
-    def _load_files(
-        self,
-        files: list,
-    ) -> Generator:
+    def _worker(self, files: List[str]) -> None:
         '''
-        Generator to load files one at a time
+        Worker thread to load files into the queue
 
         Args:
             files: list
                 A list of JSON files to load
+        '''
+        for file in files:
+            if self.load_stop_event.is_set():
+                break
+            data = self._loader(file)
+            self.load_queue.put(data)
+
+    def _load_files(self, files: List[str]) -> None:
+        '''
+        Load files into the queue using multiple worker threads
+
+        Args:
+            files: list
+                A list of JSON files to load
+        '''
+        # Split the files among the workers
+        chunk_size = len(files) // self.num_workers
+        threads = []
+
+        for i in range(self.num_workers):
+            start_index = i * chunk_size
+            end_index = None if i == self.num_workers - 1 else (i + 1) * chunk_size
+            thread_files = files[start_index:end_index]
+            thread = threading.Thread(
+                target=self._worker,
+                args=(thread_files,)
+            )
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to finish
+        for thread in threads:
+            thread.join()
+
+        # Signal that loading is done
+        self.load_queue.put(None)
+
+    def start_loading(self, files: list) -> None:
+        '''
+        Start the loader thread
+
+        Args:
+            files: list
+                A list of JSON files to load
+        '''
+        self.loader_thread = threading.Thread(
+            target=self._load_files,
+            args=(files,)
+        )
+        self.loader_thread.start()
+
+    def stop_loading(self) -> None:
+        '''
+        Stop the loader thread
+        '''
+        self.stop_event.set()
+        self.loader_thread.join()
+
+    def get_data(self) -> Generator:
+        '''
+        Generator to yield data from the queue
 
         Yields:
             dict
                 The contents of the JSON file
         '''
-
-        for file in files:
-            yield self._loader(file)
+        while True:
+            data = self.load_queue.get()
+            if data is None:
+                break
+            yield data
 
     def _load_games(
         self,
@@ -256,7 +323,7 @@ class CreateDataSet():
 
         # Get games by year
         for year in tqdm(
-            self._load_files(self.file_list),
+            self.get_data(),
             desc='Pre-loading dataset',
             total=len(self.file_list),
             colour='cyan',
