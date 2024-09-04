@@ -97,12 +97,20 @@ print(
 print(
     Fore.YELLOW, "----------------------------------------------------"
 )
-print(
-    Fore.YELLOW, "| ",
-    Fore.GREEN, "Device",
-    Fore.YELLOW, "           | ",
-    Fore.GREEN, model_config.device
-)
+if model_config.device == 'cuda':
+    print(
+        Fore.YELLOW, "| ",
+        Fore.GREEN, "Device",
+        Fore.YELLOW, "           | ",
+        Fore.GREEN, model_config.device
+    )
+else:
+    print(
+        Fore.YELLOW, "| ",
+        Fore.GREEN, "Device",
+        Fore.YELLOW, "           | ",
+        Fore.RED, model_config.device
+    )
 print(
     Fore.YELLOW, "| ",
     Fore.GREEN, "Batch size",

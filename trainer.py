@@ -132,8 +132,9 @@ class GPTTrainer():
         '''
 
         # Setup CUDA streams for faster data transfer
-        data_stream = Stream()
-        comp_stream = Stream()
+        if self.device == 'cuda':
+            data_stream = Stream()
+            comp_stream = Stream()
 
         # Set the starting epoch
         epoch = 0
@@ -216,25 +217,38 @@ class GPTTrainer():
 
                     # Move to GPU, using CUDA streams for faster data transfer
                     xb, yb = batch
-                    with torch.cuda.stream(data_stream):
-                        xb = xb.to(self.device, non_blocking=True)
-                        yb = yb.to(self.device, non_blocking=True)
+                    if self.device == 'cuda':
+                        with torch.cuda.stream(data_stream):
+                            xb = xb.to(self.device, non_blocking=True)
+                            yb = yb.to(self.device, non_blocking=True)
+                    else:
+                        xb = xb.to(self.device)
+                        yb = yb.to(self.device)
 
                     # Forward pass and backpropagation, using CUDA streams
-                    with torch.cuda.stream(comp_stream):
-                        # Forward pass
-                        with autocast('cuda'):
-                            _, loss = model(xb, yb)
+                    if self.device == 'cuda':
+                        with torch.cuda.stream(comp_stream):
+                            # Forward pass
+                            with autocast('cuda'):
+                                _, loss = model(xb, yb)
 
-                        # Mixed precision backpropagation
+                            # Mixed precision backpropagation
+                            scaler.scale(loss).backward()
+                            scaler.step(optimizer)
+                            scaler.update()
+
+                            # Update the scheduler
+                            scheduler.step(
+                                epoch + batch_idx / dataset.train_data_size
+                            )
+                    else:
+                        # Forward pass
+                        _, loss = model(xb, yb)
+
+                        # Backpropagation
                         scaler.scale(loss).backward()
                         scaler.step(optimizer)
                         scaler.update()
-
-                        # Update the scheduler
-                        scheduler.step(
-                            epoch + batch_idx / dataset.train_data_size
-                        )
 
                 print(
                     Fore.YELLOW,
