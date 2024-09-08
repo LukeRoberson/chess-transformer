@@ -232,7 +232,7 @@ class CreateDataSet():
             self.file_list,
             total=len(self.file_list),
             desc="Reading files",
-            colour="cyan",
+            colour="blue",
             leave=False,
         ):
             games = await self._read_file(file)

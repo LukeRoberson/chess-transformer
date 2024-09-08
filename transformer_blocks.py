@@ -733,6 +733,8 @@ class GPTLanguageModel(nn.Module):
         }
 
         # Save the model
+        if filename == 'model.pth':
+            filename = f'model_{epoch + 1}.pth'
         try:
             torch.save(checkpoint, filename)
         except Exception as e:
