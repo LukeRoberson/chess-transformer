@@ -16,17 +16,17 @@ from tokenizer import ChessTokenizer
 
 import os
 import re
-import json
 from tqdm import tqdm
+from tqdm.asyncio import tqdm as async_tqdm
 import random
 import numpy as np
 import gc
-import threading
-import queue
-import time
+import aiofiles
+import ijson
 
 from typing import Tuple, Generator
 import traceback
+import time
 
 
 class CreateDataSet():
@@ -38,20 +38,14 @@ class CreateDataSet():
         __init__:
             Constructor
 
-        __enter__:
-            Context manager for the dataset
+        __aenter__ and __aexit__:
+            Asynchronous context manager for the dataset
 
-        __exit__:
-            Context manager for the dataset
+        _read_file:
+            Read a JSON file and return the games
 
-        _loader:
-            Load a single JSON file and return the contents
-
-        _load_files:
-            Generator to load files one at a time
-
-        _load_games:
-            Generator to load games one at a time
+        _process_data:
+            Process the game data and tokenize it
 
         _build_dataset:
             Build the dataset
@@ -96,10 +90,7 @@ class CreateDataSet():
         self.train_dataloader = None
         self.train_data_size = None
 
-        # Track the number of skipped games
-        self.skipped_games = 0
-
-    def __enter__(
+    async def __aenter__(
         self
     ) -> Tuple[DataLoader, int]:
         '''
@@ -113,7 +104,8 @@ class CreateDataSet():
         '''
 
         # Create the dataset and dataloaders
-        self._build_dataset()
+        self.start_time = time.time()
+        await self._build_dataset()
 
         # Return the dataloaders and the sizes of the training and testing sets
         return (
@@ -121,7 +113,7 @@ class CreateDataSet():
             self.train_data_size,
         )
 
-    def __exit__(
+    async def __aexit__(
         self,
         exc_type: type,
         exc_val: Exception,
@@ -156,128 +148,114 @@ class CreateDataSet():
         self.train_data_size = None
         self.test_data_size = None
 
+        # Simple stats
+        elapsed_time = time.time() - self.start_time
+        minutes = int(elapsed_time // 60)
+        seconds = int(elapsed_time % 60)
+        print(f"Dataset created in: {minutes}:{seconds} seconds")
+
         # Propagate exception if there is one
         return False
 
-    def _loader(
+    async def _read_file(
         self,
         file: str,
-    ) -> dict:
+    ) -> list:
         '''
-        Load a single JSON file and return the contents
+        Read a JSON file and return a list of games
 
         Args:
             file: str
                 The path to the JSON file
 
         Returns:
-            dict
-                The contents of the JSON file
+            list
+                A list of games from the JSON file (PGN format)
         '''
 
-        with open(file, 'r') as f:
-            contents = json.load(f)
-            year = list(contents.keys())[0]
-            return contents[year]
+        game_list = []
 
-    def _load_files(
+        # Asynchronously read the file (for performance)
+        async with aiofiles.open(file, 'r') as f:
+            # iJSON uses streams to read the file
+            #   Memory efficient and high performance
+            async for prefix, event, value in ijson.parse(f):
+                if 'pgn' in prefix:
+                    game_list.append(value)
+
+        return game_list
+
+    async def _process_data(
         self,
-        files: list,
-    ) -> Generator:
+        game: str,
+    ) -> np.array:
         '''
-        Load files into the queue in a separate thread
+        Process the game data and tokenize it
+        This includes removing the move numbers and padding the sequence
+        Skip games that are too short or too long
 
         Args:
-            files: list
-                A list of JSON files to load
+            game: str
+                The game in PGN format
+
+        Returns:
+            np.array or None
+                The processed game as a numpy array
+                None if the game is too short or too long
         '''
 
-        for file in files:
-            yield self._loader(file)
+        # Strip the move numbers from the PGN
+        filtered = re.sub(r"\d{1,3}\. ", "", game).strip()
+        length = len(filtered.split(" "))
 
-    def _load_games(
-        self,
-        games: dict,
-    ) -> Generator:
-        '''
-        Generator to load games one at a time
-        Each file has one or more games,
-            this function yields them one at a time
+        # Skip games that are too short or too long
+        if length > 6 and length < (self.block_size - 1):
+            # Tokenize the game and pad the sequence
+            processed = self.tokenizer.tokenize(
+                filtered,
+                pad=True,
+                pad_size=self.block_size,
+            )
 
-        Args:
-            games: dict
+            # Return the processed game as a numpy array
+            return np.array(processed)
 
-        Yields:
-            np.array
-                A tokenized game as a numpy array
-        '''
+        # Return None if the game is too short or too long
+        return None
 
-        # Loop through each month in the games
-        for month in games:
-            # Loop through each game in the month
-            for game in games[month]:
-                # Strip the move numbers from the PGN
-                filtered = re.sub(r"\d{1,3}\. ", "", game['pgn']).strip()
-                length = len(filtered.split(" "))
-
-                # Skip games that are too short or too long
-                if length > self.min_length and length < (self.block_size - 1):
-                    # Tokenize the game and pad the sequence
-                    processed = self.tokenizer.tokenize(
-                        filtered,
-                        pad=True,
-                        pad_size=self.block_size,
-                    )
-
-                    # Yield the tokenized game
-                    yield np.array(processed)
-
-    def _build_dataset(
+    async def _build_dataset(
         self,
     ) -> None:
-        '''
-        Build the dataset
-
-        (1) Loads files and games as needed
-        (2) Formats into a 2D Numpy array
-        (3) Converts to input and target sequences
-        (4) Splits into training and testing sets
-        (5) Creates DataLoader objects for the training and testing sets
-
-        Uses numpy arrays for memory efficiency
-        Adds manual garbage collection to help with memory management
-        '''
-
-        np_array = np.empty((0, self.block_size), dtype=object)
-
-        # Get games by year
-        for year in tqdm(
-            self._load_files(self.file_list),
-            desc='Pre-loading dataset',
+        # Read files and create async tasks
+        tasks = []
+        async for file in async_tqdm(
+            self.file_list,
             total=len(self.file_list),
-            colour='cyan',
+            desc="Reading files",
+            colour="cyan",
             leave=False,
         ):
-            all_games = []
+            games = await self._read_file(file)
+            for game in games:
+                tasks.append(self._process_data(game))
 
-            # Build a list of games (np arrays)
-            for game in self._load_games(year):
-                all_games.append(game)
+        # Process async tasks
+        results = []
+        for task in tqdm(
+            tasks,
+            total=len(tasks),
+            desc="Processing games",
+            colour="cyan",
+            leave=False,
+        ):
+            result = await task
+            if result is not None:
+                results.append(result)
 
-            # After each file, convert list to np array
-            if np_array.size == 0:
-                np_array = np.array(all_games)
-            elif len(all_games) > 0:
-                np_array = np.concatenate(
-                    (np_array, np.array(all_games)),
-                    axis=0
-                )
-
-        # Create input and target sequences
+        # Convert to NP array
+        np_array = np.vstack(results)
         train_data = np_array[:, :-1]
         train_labels = np_array[:, 1:]
-
-        # Get the sizes of the training and testing sets
         self.train_data_size = len(train_data)
 
         # Create TensorDatasets for the training and testing sets
@@ -296,6 +274,7 @@ class CreateDataSet():
             batch_size=self.batch_size,
             shuffle=True,
             pin_memory=True,
+            num_workers=os.cpu_count() - 1
         )
         gc.collect()
 
@@ -305,26 +284,17 @@ class ManageDataSet():
     The main class for managing the dataloaders
     Uses the CreateDataSet class to create the dataloaders
 
-    Threading enables parts of the dataset to be loaded in the background
-        This means training can continue while the next dataset is prepared
-        The dataset is loaded in chunks. Each chunk is a percentage
-            of the entire dataset
-
     Methods:
         __init__:
             Request dataloaders from the CreateDataSet class
 
         get_dataset:
             Get a dataset with a certain percentage of the files
+            Asynchronously loads the dataset
 
-        data_loader_thread:
-            Thread for loading the dataset in the background
-
-        start_data_loading:
-            Start the thread for loading the dataset
-
-        stop_data_loading:
-            Stop the thread for loading the dataset
+        get_test_dataset:
+            Get the test dataset for the model
+            Synchonously loads the dataset
 
         get_batch:
             Get a batch of data from the training or testing set
@@ -336,15 +306,15 @@ class ManageDataSet():
     def __init__(
         self,
         model_config: GPTConfig,
-        dataset_dir: str = './dataset'
+        dataset_dir: str = './dataset',
+        test_split: float = 0.1,
     ) -> None:
         '''
         Constructor
 
         (1) Setup initial values
         (2) Collect JSON files from the dataset directory
-        (3) Setup threading for loading the dataset
-        (4) Create a dataset using the context manager
+        (3) Create a dataset using the context manager
 
         Args:
             config: GPTConfig
@@ -381,26 +351,21 @@ class ManageDataSet():
         # File list is shuffled to help prevent overfitting
         random.shuffle(original_file_list)
 
-        # Get 10% of the files
-        num_files = int(len(original_file_list) * 0.1)
+        # Get a percentage of the files for evaluation
+        num_files = int(len(original_file_list) * test_split)
         self.eval_list = original_file_list[:num_files]
         self.train_list = original_file_list[num_files:]
 
         # Create a copy of the original file list that we can edit
         self.files_remaining = self.train_list.copy()
 
-        # Setup threading
-        self.data_queue = queue.Queue(maxsize=1)
-        self.stop_loading = threading.Event()
-
-    def get_dataset(
+    async def get_dataset(
         self,
         percentage: float = 1.0,
     ) -> None:
         '''
         Get a dataset with a certain percentage of the files
         The percentage determines the chunk size
-        While the model is training on one chunk, the next chunk is prepared
 
         This uses 'files_remaining' to keep track of which files are left
             from the entire dataset. This ensures that all files are used
@@ -409,6 +374,7 @@ class ManageDataSet():
             This can be repeated for multiple epochs
 
         Uses the CreateDataSet class to create the dataloaders
+            Uses async operations for performance
 
         Args:
             percentage: float
@@ -442,7 +408,7 @@ class ManageDataSet():
             file_list.append(self.files_remaining.pop(0))
 
         # Create a dataset using the context manager
-        with CreateDataSet(
+        async with CreateDataSet(
             file_list=file_list,
             batch_size=self.model_config.batch_size,
             tokenizer=self.tokenizer,
@@ -475,73 +441,6 @@ class ManageDataSet():
             self.test_dataloader = test_dataset
             self.test_data_size = test_size
 
-    def data_loader_thread(
-        self,
-        percentage: float
-    ) -> None:
-        '''
-        Loads the dataset in the background using an existing thread
-        Checks if the 'stop loading' event is set. If not, it loads the
-            next dataset chunk.
-        The next chunk is only loaded if the queue is empty
-            This saves system memory usage by only loading chunks as needed
-
-        Args:
-            percentage: float
-                The percentage of the dataset to use in a chunk
-        '''
-
-        # loop to load the dataset in the background
-        while not self.stop_loading.is_set():
-            # Check if the queue is empty
-            if self.data_queue.empty():
-                # Build a new dataset
-                self.get_dataset(percentage)
-
-                # Put the new dataset in the queue
-                self.data_queue.put(
-                    (
-                        self.train_dataloader,
-                        self.train_data_size,
-                    )
-                )
-
-            # A short sleep before checking again
-            time.sleep(1)
-
-    def start_data_loading(
-        self,
-        percentage: float
-    ):
-        '''
-        Creates a thread to load the dataset in the background
-
-        Args:
-            percentage: float
-        '''
-
-        # Create a thread to load the dataset in the background
-        self.loading_thread = threading.Thread(
-            target=self.data_loader_thread,
-            args=(percentage,)
-        )
-
-        # Start the thread
-        self.loading_thread.start()
-
-    def stop_data_loading(
-        self
-    ) -> None:
-        '''
-        Stops the thread for loading the dataset in the background
-        '''
-
-        # Set the stop loading event to stop the thread
-        self.stop_loading.set()
-
-        # Wait for the thread to finish before continuing
-        self.loading_thread.join()
-
     def get_batch(
         self,
         split: str = 'train'
@@ -563,6 +462,7 @@ class ManageDataSet():
         '''
 
         # Get the correct dataloader (test or train) as an iterator
+        print(f"Getting batch from {split} set")
         data_loader = (
             self.train_dataloader
             if split == 'train'

@@ -89,7 +89,7 @@ class GPTTrainer():
         self.sched_cycle_factor = sched_cycle_factor
         self.sched_min_lr = sched_min_lr
 
-    def train(
+    async def train(
         self,
         model: GPTLanguageModel,
         dataset: ManageDataSet,
@@ -103,6 +103,7 @@ class GPTTrainer():
     ) -> None:
         '''
         The training loop for the GPT model
+        This has an asynchronous context to allow for async data loading
 
         Supports resuming training from a checkpoint
             To resume, set resume=True and provide the checkpoint path
@@ -169,9 +170,6 @@ class GPTTrainer():
             print("Training complete!")
             return
 
-        # Start loading the data in a separate thread
-        dataset.start_data_loading(percentage=percent)
-
         # The main training loop
         for epoch_num in range(epoch, self.epochs):
             epoch_start_time = time.time()
@@ -181,10 +179,11 @@ class GPTTrainer():
             for chunk in range(math.ceil(1.0 / percent)):
                 chunk_start_time = time.time()
 
-                # Fetch the next chunk from the queue
-                train_dataloader, train_data_size = (
-                    dataset.data_queue.get()
-                )
+                # Get the training dataset chunk
+                await dataset.get_dataset()
+                train_dataloader = dataset.train_dataloader
+                train_data_size = dataset.train_data_size
+                print("Training size: ", train_data_size)
 
                 # Steps (batch loop) batches within an epoch
                 model.train()
@@ -199,7 +198,7 @@ class GPTTrainer():
                         total=train_data_size // self.batch_size,
                         colour='yellow',
                         desc="Training batches",
-                        leave=False,
+                        leave=True,
                     )
                 ):
                     optimizer.zero_grad(set_to_none=True)
@@ -301,9 +300,6 @@ class GPTTrainer():
                 max_new_tokens=50
             )[0].tolist()
             print(tokenizer.detokenize(sequence))
-
-        # End of loop, stop the thread
-        dataset.stop_data_loading()
 
     @torch.no_grad()
     def estimate_loss(
