@@ -418,7 +418,7 @@ class ManageDataSet():
             self.train_dataloader = train_dataset
             self.train_data_size = train_size
 
-    def get_test_dataset(
+    async def get_test_dataset(
         self,
     ):
         '''
@@ -431,7 +431,7 @@ class ManageDataSet():
         '''
 
         # Create the dataset as normal
-        with CreateDataSet(
+        async with CreateDataSet(
             file_list=self.eval_list,
             batch_size=self.model_config.batch_size,
             tokenizer=self.tokenizer,
