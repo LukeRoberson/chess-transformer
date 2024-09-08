@@ -1,5 +1,5 @@
 dataset:
-  path: ./dataset
+  path: d:\pgn-dumps
   batch_size: 64
   test_split: 0.1
   chunk_percent: 0.1

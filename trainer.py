@@ -180,7 +180,7 @@ class GPTTrainer():
                 chunk_start_time = time.time()
 
                 # Get the training dataset chunk
-                await dataset.get_dataset()
+                await dataset.get_dataset(percentage=percent)
                 train_dataloader = dataset.train_dataloader
                 train_data_size = dataset.train_data_size
                 print("Training size: ", train_data_size)
