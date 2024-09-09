@@ -24,7 +24,7 @@ import gc
 import aiofiles
 import ijson
 
-from typing import Tuple, Generator
+from typing import Tuple
 import traceback
 import time
 
@@ -411,7 +411,7 @@ class ManageDataSet():
             batch_size=self.model_config.batch_size,
             tokenizer=self.tokenizer,
             min_length=6,
-            block_size=192,
+            block_size=self.model_config.block_size,
         ) as (train_dataset, train_size):
             self.train_dataloader = train_dataset
             self.train_data_size = train_size
@@ -434,7 +434,7 @@ class ManageDataSet():
             batch_size=self.model_config.batch_size,
             tokenizer=self.tokenizer,
             min_length=6,
-            block_size=192,
+            block_size=self.model_config.block_size,
         ) as (test_dataset, test_size):
             self.test_dataloader = test_dataset
             self.test_data_size = test_size
