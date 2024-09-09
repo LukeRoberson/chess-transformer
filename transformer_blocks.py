@@ -415,6 +415,8 @@ class GPTLanguageModel(nn.Module):
                 Tracks tokens semantic meanings
             (2) Create an embedding layer for the positions
                 Understand the sequence of tokens
+                This uses relative positions, not fixed
+                The original transformer used fixed positions
             (3) Create a series of transformer blocks
             (4) Create a final normalization layer
                 Stabalize activation functions
@@ -448,8 +450,9 @@ class GPTLanguageModel(nn.Module):
 
         # An embedding layer for token positions; 2D tensor
         #   Trainable matrix to understand the sequence of tokens
+        #   Larger than block size to handle relative positions, not just fixed
         self.position_embedding_table = nn.Embedding(
-            config.block_size,
+            2 * config.block_size - 1,
             config.n_embd
         )
 
@@ -472,7 +475,7 @@ class GPTLanguageModel(nn.Module):
 
         # Get the parameter count of the model
         self.param_count = sum(
-            # numel() is a PyTorch way to count elements in a tensor
+            # The PyTorch way to count elements in a tensor
             p.numel()
             for p in self.parameters()
         )
@@ -571,12 +574,25 @@ class GPTLanguageModel(nn.Module):
             The number of rows (T) corresponds to the sequence length
             The number of columns (C) corresponds to the embedding size
         '''
-        pos_emb = self.position_embedding_table(
-            torch.arange(T, device=self.device)
-        )
 
-        # Combine the token and position embeddings (B, T, C)
-        transformed_embeddings = tok_emb + pos_emb
+        # Compute relative positional encodings
+        #   A matrix of relative distances between positions (T, T)
+        #   Confirm all positions are positive values
+        range_vec = torch.arange(T, device=self.device)
+        relative_positions = range_vec[:, None] - range_vec[None, :]
+        relative_positions = relative_positions + (self.block_size - 1)
+
+        # Use the position embedding table for relative positions
+        #   Shape of relative_position_embeddings will be (T, T, C)
+        relative_embeds = self.position_embedding_table(relative_positions)
+
+        # Combine the token embeddings and relative position embeddings
+        #   Shape of transformed_embeddings will be (B, T, T, C)
+        transformed_embeddings = tok_emb.unsqueeze(1) + relative_embeds
+
+        # Pass the embeddings through the transformer blocks
+        #   Reduce the second dimension (T) by summing (B, T, C)
+        transformed_embeddings = transformed_embeddings.sum(2)
 
         # Pass the embeddings through the transformer blocks
         transformed_embeddings = self.blocks(transformed_embeddings)

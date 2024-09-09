@@ -39,7 +39,6 @@ class GPTTrainer():
         learning_rate: float = 2e-4,
         warmup_steps: int = 10,
         test_split: float = 0.2,
-        eval_iterations: int = 50,
         weight_decay: float = 0.01,
         sched_first_cycle: int = 10,
         sched_cycle_factor: int = 1,
@@ -59,8 +58,6 @@ class GPTTrainer():
                 The number of warmup steps to use for the scheduler
             test_split: float
                 The percentage of the dataset to use for testing
-            eval_iterations: int
-                The number of iterations to use for evaluation
             weight_decay: float
                 The weight decay to use for the optimizer
             sched_first_cycle: int
@@ -76,7 +73,6 @@ class GPTTrainer():
         self.learning_rate = learning_rate
         self.test_split = test_split
         self.model_config = model_config
-        self.eval_iterations = eval_iterations
         self.batch_size = model_config.batch_size
         self.device = model_config.device
 

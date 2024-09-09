@@ -53,7 +53,6 @@ async def main():
         warmup_steps=settings.training['warmup_steps'],
         test_split=settings.dataset['test_split'],
         model_config=model_config,
-        eval_iterations=settings.training['eval_iterations'],
         weight_decay=settings.regularization['weight_decay'],
         sched_first_cycle=settings.scheduler['first_cycle'],
         sched_cycle_factor=settings.scheduler['cycle_factor'],

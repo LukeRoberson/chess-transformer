@@ -75,9 +75,6 @@ class Config:
         self.training['warmup_steps'] = (
             settings['train']['warmup_steps']
         )
-        self.training['eval_iterations'] = (
-            settings['train']['eval_iterations']
-        )
         self.training['checkpoint'] = (
             settings['train']['checkpoint']
         )
