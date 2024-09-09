@@ -17,13 +17,6 @@
 * Stop generating when we reach an end token
 * Add temperature
 
-## Dataset
-* Consolidate the two get_batch() methods down to one
-* Add 'num_workers' to improve dataloader creation
-* Consider python.futures to load files in parallel
-* Can we add garbage collection to free up memory?
-* When creating test/train splits, consider list comprehensions for performance
-
 # Tokenizer
 * Add support for parallel processing when tokenizing strings
 * Can games be tokenized in batches?
@@ -37,4 +30,3 @@
 * Separate forward pass from the loss?
 * Can we use data augmentation to improve the dataset?
 * During finetuning, can we add annotations to explain moves?
-* YAML file for configuration

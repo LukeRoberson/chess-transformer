@@ -614,7 +614,7 @@ class GPTLanguageModel(nn.Module):
 
     def generate(
         self,
-        context: torch.Tensor,
+        context: Optional[torch.Tensor],
         max_new_tokens: int
     ) -> torch.Tensor:
         '''
@@ -677,10 +677,10 @@ class GPTLanguageModel(nn.Module):
     def save_checkpoint(
         self,
         filename: str = 'model.pth',
-        optimizer: torch.optim.Optimizer = None,
-        scheduler: torch.optim.lr_scheduler._LRScheduler = None,
-        epoch: int = None,
-        loss_history: dict = None
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+        epoch: Optional[int] = None,
+        loss_history: Optional[dict] = None
     ) -> bool:
         '''
         Save the model
@@ -746,8 +746,8 @@ class GPTLanguageModel(nn.Module):
     def load_checkpoint(
         self,
         filename: str = 'model.pth',
-        optimizer=None,
-        scheduler=None
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
     ) -> Tuple[int, dict] | None:
         '''
         Load a checkpoint

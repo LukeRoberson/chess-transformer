@@ -152,7 +152,7 @@ class CreateDataSet():
         elapsed_time = time.time() - self.start_time
         minutes = int(elapsed_time // 60)
         seconds = int(elapsed_time % 60)
-        print(f"Dataset created in: {minutes}:{seconds} seconds")
+        print(f"Dataset created in: {minutes}:{seconds:02} minutes")
 
         # Propagate exception if there is one
         return False
@@ -295,12 +295,6 @@ class ManageDataSet():
         get_test_dataset:
             Get the test dataset for the model
             Synchonously loads the dataset
-
-        get_batch:
-            Get a batch of data from the training or testing set
-
-        data_iter:
-            Iterate over the dataset in batches
     '''
 
     def __init__(
@@ -355,6 +349,9 @@ class ManageDataSet():
         num_files = int(len(original_file_list) * test_split)
         self.eval_list = original_file_list[:num_files]
         self.train_list = original_file_list[num_files:]
+        print(f"{len(original_file_list)} files found in dataset")
+        print(f"{len(self.train_list)} files for training")
+        print(f"{len(self.eval_list)} files for evaluation")
 
         # Create a copy of the original file list that we can edit
         self.files_remaining = self.train_list.copy()
@@ -390,6 +387,7 @@ class ManageDataSet():
         # If there are no files left, evaluate model and return None
         if len(self.files_remaining) == 0:
             # Reset the files remaining to the original list
+            print("All files in dataset have been processed")
             self.files_remaining = self.train_list.copy()
             random.shuffle(self.files_remaining)
             return None
@@ -440,91 +438,6 @@ class ManageDataSet():
         ) as (test_dataset, test_size):
             self.test_dataloader = test_dataset
             self.test_data_size = test_size
-
-    def get_batch(
-        self,
-        split: str = 'train'
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        '''
-        Get a single batch of data from the training or testing set
-        This returns a batch of input and target tensors
-            They are automatically moved to the right device
-
-        Args:
-            split: str
-                The split to get the batch from
-                Either 'train' or 'test'
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor] or None
-                The input and target tensors
-                None if all batches are exhausted
-        '''
-
-        # Get the correct dataloader (test or train) as an iterator
-        print(f"Getting batch from {split} set")
-        data_loader = (
-            self.train_dataloader
-            if split == 'train'
-            else self.test_dataloader
-        )
-        data_loader_iter = iter(data_loader)
-
-        # Get the next batch, or return None if the iterator is exhausted
-        batch = next(data_loader_iter, None)
-
-        # If the iterator is exhausted and returned None, return None
-        if batch is None:
-            return None
-
-        # Get the input and target tensors, and move to the right device
-        input, target = batch
-        input = input.to(self.model_config.device)
-        target = target.to(self.model_config.device)
-
-        # Return the input and target tensors (a batch of data)
-        return input, target
-
-    def data_iter(self, split: str = 'train') -> Generator:
-        '''
-        Iterate over the dataset
-
-        Creates a generator that yields batches of data and targets at a time.
-            This makes the function iterable, so it can be used in a for loop.
-
-        This partitions the data into batches, allowing for processing large
-            datasets in manageable chunks without loading the entire dataset
-            into memory at once, enhancing memory efficiency.
-
-        Args:
-            split: str
-                The split to iterate over
-                Either 'train' or 'test'
-
-        Yields:
-            Tuple[List[Any], List[Any]]
-        '''
-
-        # Choose the correct dataloader
-        if split == 'train':
-            data_loader = self.train_dataloader
-        else:
-            data_loader = self.test_dataloader
-
-        # Initialize the iterator if not already done or if it's exhausted
-        if self.data_loader_iter is None:
-            self.data_loader_iter = iter(data_loader)
-
-        while True:
-            try:
-                batch = next(self.data_loader_iter)
-                input, target = batch
-                yield input, target
-
-            # This handles running out of data in the iterator
-            except StopIteration:
-                self.data_loader_iter = iter(data_loader)
-                break
 
 
 if __name__ == '__main__':

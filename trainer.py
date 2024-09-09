@@ -175,15 +175,12 @@ class GPTTrainer():
             epoch_start_time = time.time()
             print(f"\n\nEpoch {epoch_num + 1} of {self.epochs}")
 
+            # Track training losses
+            train_losses = []
+
             # Chunking - Loop over chunks per epoch
             for chunk in range(math.ceil(1.0 / percent)):
                 chunk_start_time = time.time()
-
-                # Get the training dataset chunk
-                await dataset.get_dataset(percentage=percent)
-                train_dataloader = dataset.train_dataloader
-                train_data_size = dataset.train_data_size
-                print("Training size: ", train_data_size)
 
                 # Steps (batch loop) batches within an epoch
                 model.train()
@@ -192,6 +189,15 @@ class GPTTrainer():
                     f"\nChunk {chunk + 1} of {math.ceil(1.0 / percent)}",
                     Style.RESET_ALL
                 )
+
+                # Get the training dataset chunk
+                await dataset.get_dataset(percentage=percent)
+                train_dataloader = dataset.train_dataloader
+                train_data_size = dataset.train_data_size
+                chunk_losses = torch.zeros(dataset.train_data_size)
+                print("Training size: ", train_data_size)
+
+                # Batch loop
                 for batch_idx, batch in enumerate(
                     tqdm(
                         train_dataloader,
@@ -231,6 +237,9 @@ class GPTTrainer():
                             with autocast('cuda'):
                                 _, loss = model(xb, yb)
 
+                            # Store losses
+                            chunk_losses[batch_idx] = loss.item()
+
                             # Mixed precision backpropagation
                             scaler.scale(loss).backward()
                             scaler.step(optimizer)
@@ -243,26 +252,36 @@ class GPTTrainer():
                     else:
                         # Forward pass
                         _, loss = model(xb, yb)
+                        chunk_losses[batch_idx] = loss.item()
 
                         # Backpropagation
                         scaler.scale(loss).backward()
                         scaler.step(optimizer)
                         scaler.update()
 
+                train_losses.append(chunk_losses)
+
+                training_time = time.time() - chunk_start_time
+                minutes = int(training_time // 60)
+                seconds = int(training_time % 60)
                 print(
                     Fore.YELLOW,
-                    f" Training time: {time.time() - chunk_start_time:.1f}s",
+                    f" Training time: {minutes}:{seconds:02} minutes",
                     Style.RESET_ALL
                 )
 
             # Create an evaluation dataset
-            dataset.get_test_dataset()
+            await dataset.get_test_dataset()
 
             # Evaluate the model on the test dataset
             losses = self.estimate_loss(
                 dataset=dataset,
                 model=model,
             )
+
+            # Combine the tensors in train_losses into a single tensor
+            train_losses_tensor = torch.cat(train_losses)
+            losses['train'] = train_losses_tensor.mean()
 
             print(
                 Fore.GREEN,
@@ -290,7 +309,7 @@ class GPTTrainer():
             print(
                 Fore.YELLOW,
                 f"Epoch {epoch_num + 1} duration: ",
-                f"{minutes:.0f}:{seconds:.0f}",
+                f"{minutes}:{seconds:02}",
                 Style.RESET_ALL
             )
 
@@ -327,27 +346,40 @@ class GPTTrainer():
         # Disable training
         model.eval()
 
-        for split in ['train', 'val']:
-            # Initialize the losses tensor to all zeros
-            losses = torch.zeros(self.eval_iterations)
+        # Initialize the losses tensor to all zeros
+        eval_losses = torch.zeros(dataset.test_data_size)
 
-            # Loop through the evaluation iterations
-            for batch_index in tqdm(
-                range(self.eval_iterations),
-                desc=f"Estimating {split} loss",
+        # Loop through the evaluation iterations
+        print(
+            Fore.GREEN,
+            "\nEstimating evaluation loss",
+            Style.RESET_ALL
+        )
+        for batch_index, batch in enumerate(
+            tqdm(
+                dataset.test_dataloader,
+                total=dataset.test_data_size // self.batch_size,
+                desc="Calculating loss",
                 colour='green',
                 leave=False,
-            ):
-                # Get a batch of data
-                X, Y = dataset.get_batch(split)
+            )
+        ):
+            # Get a batch of data
+            X, Y = batch
+            if self.device == 'cuda':
+                X = X.to(self.device, non_blocking=True)
+                Y = Y.to(self.device, non_blocking=True)
+            else:
+                X = X.to(self.device)
+                Y = Y.to(self.device)
 
-                # Run the forward pass and get the loss
-                _, loss = model(X, Y)
+            # Run the forward pass and get the loss
+            _, loss = model(X, Y)
 
-                # Store the loss in the tensor
-                losses[batch_index] = loss.item()
+            # Store the loss in the tensor
+            eval_losses[batch_index] = loss.item()
 
-            average_losses_train[split] = losses.mean()
+        average_losses_train['val'] = eval_losses.mean()
 
         # Enable training again
         model.train()
