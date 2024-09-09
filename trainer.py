@@ -334,6 +334,8 @@ class GPTTrainer():
         Args:
             dataset: DataSet
                 The dataset to evaluate the model on
+            model: GPTLanguageModel
+                The model to evaluate
 
         Returns:
             dict
