@@ -305,7 +305,7 @@ class GPTTrainer():
             print(
                 Fore.YELLOW,
                 f"Epoch {epoch_num + 1} duration: ",
-                f"{minutes}:{seconds:02}",
+                f"{minutes:.0f}:{seconds:02.0f}",
                 Style.RESET_ALL
             )
 
