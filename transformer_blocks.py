@@ -56,9 +56,9 @@ class Head(nn.Module):
         super().__init__()
 
         # Create the key, query, and value linear layers
-        self.key = nn.Linear(config.n_embd, head_size, bias=False)
-        self.query = nn.Linear(config.n_embd, head_size, bias=False)
-        self.value = nn.Linear(config.n_embd, head_size, bias=False)
+        self.key = nn.Linear(config.n_embd, head_size, bias=True)
+        self.query = nn.Linear(config.n_embd, head_size, bias=True)
+        self.value = nn.Linear(config.n_embd, head_size, bias=True)
 
         # Create the look-ahead mask
         self.register_buffer(
@@ -750,7 +750,7 @@ class GPTLanguageModel(nn.Module):
         }
 
         # Save the model
-        filename = f'{filename.split(".")}_epoch_{epoch + 1}.pth'
+        filename = f'{filename.split(".")[0]}_epoch_{epoch + 1}.pth'
         try:
             torch.save(checkpoint, filename)
         except Exception as e:
