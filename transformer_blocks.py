@@ -273,7 +273,7 @@ class FeedFoward(nn.Module):
             nn.Linear(config.n_embd, 4 * config.n_embd),
 
             # ReLU activation function
-            nn.ReLU(),
+            nn.GELU(),
 
             # Layer 2: Reduce the dimensions back to the original size
             nn.Linear(4 * config.n_embd, config.n_embd),
@@ -750,8 +750,7 @@ class GPTLanguageModel(nn.Module):
         }
 
         # Save the model
-        if filename == 'model.pth':
-            filename = f'model_{epoch + 1}.pth'
+        filename = f'{filename.split(".")}_epoch_{epoch + 1}.pth'
         try:
             torch.save(checkpoint, filename)
         except Exception as e:
