@@ -372,12 +372,11 @@ class Block(nn.Module):
         '''
 
         # Self attention, normalization, and residual connection
-        #   Using Post-Norm architecture
-        x = self.sa(self.ln1(x)) + x
+        #   Pre-normalization architecture
+        x = x + self.sa(self.ln1(x))
 
         # Feed-forward transformation, normalization, and residual connection
-        #   Post-Norm architecture
-        x = self.ffwd(self.ln2(x)) + x
+        x = x + self.ffwd(self.ln2(x))
 
         return x
 
