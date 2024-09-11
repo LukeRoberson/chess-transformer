@@ -75,9 +75,13 @@ class Config:
         self.training['warmup_steps'] = (
             settings['train']['warmup_steps']
         )
-        self.training['checkpoint'] = (
-            settings['train']['checkpoint']
+        self.training['save_checkpoint'] = (
+            settings['train']['save_checkpoint']
         )
+        if 'load_checkpoint' in settings['train']:
+            self.training['load_checkpoint'] = settings['train']['load_checkpoint']
+        else:
+            self.training['load_checkpoint'] = None
         self.training['resume'] = (
             settings['train']['resume']
         )

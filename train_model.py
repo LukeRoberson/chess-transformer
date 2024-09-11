@@ -210,7 +210,8 @@ async def main():
         tokenizer=tokenizer,
         resume=settings.training['resume'],
         percent=settings.dataset['chunk_percent'],
-        checkpoint=settings.training['checkpoint'],
+        checkpoint=settings.training['save_checkpoint'],
+        resume_file=settings.training['load_checkpoint'],
     )
 
     print(Fore.GREEN, "Training complete")

@@ -17,6 +17,7 @@ from tqdm import tqdm
 from colorama import Fore, Style
 import math
 import time
+from typing import Optional
 
 
 class GPTTrainer():
@@ -96,6 +97,7 @@ class GPTTrainer():
         percent: float = 1.0,
         resume: bool = False,
         checkpoint: str = 'model.pth',
+        resume_file: Optional[str] = None,
     ) -> None:
         '''
         The training loop for the GPT model
@@ -142,11 +144,18 @@ class GPTTrainer():
         # Resume training from a checkpoint, will update starting epoch
         if resume:
             # Load the model from the checkpoint
-            epoch, loss_history = model.load_checkpoint(
-                optimizer=optimizer,
-                scheduler=scheduler,
-                filename=checkpoint,
-            )
+            try:
+                epoch, loss_history = model.load_checkpoint(
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    filename=resume_file,
+                )
+            except FileNotFoundError as e:
+                print(e)
+                return
+            except RuntimeError as e:
+                print(e)
+                return            
 
             # Print previous loss history
             for epoch_num, losses in loss_history.items():

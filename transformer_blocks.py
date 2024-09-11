@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from tokenizer import ChessTokenizer
 
 from typing import Optional, Tuple
+import os
 
 
 class Head(nn.Module):
@@ -782,19 +783,21 @@ class GPTLanguageModel(nn.Module):
                 The loss history to resume training from.
         '''
 
+        # Check if the checkpoint file exists
+        if not os.path.isfile(filename):
+            raise FileNotFoundError(f'Checkpoint file not found: {filename}')
+    
         # Load the checkpoint file
         try:
             checkpoint = torch.load(filename)
         except Exception as e:
-            print(f'Error loading model: {e}')
-            return None
+            raise RuntimeError(f'Error loading model: {e}')
 
         # Load the model state
         try:
             self.load_state_dict(checkpoint['model_state_dict'])
         except Exception as e:
-            print(f'Error loading model state: {e}')
-            return None
+            raise RuntimeError(f'Error loading model state: {e}')
 
         # Optionally load the optimizer and scheduler states
         epoch = 0

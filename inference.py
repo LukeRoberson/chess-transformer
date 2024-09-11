@@ -34,7 +34,12 @@ model = GPTLanguageModel(
 print(f'{model.param_count/1e6}M parameters')
 
 # Load the model
-model.load_checkpoint()
+try:
+    model.load_checkpoint()
+except FileNotFoundError as e:
+    print(e)
+except RuntimeError as e:
+    print(e)
 
 # Generate a sequence of tokens from scratch
 sequence = model.generate(context=None, max_new_tokens=50)[0].tolist()
